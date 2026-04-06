@@ -1,0 +1,9 @@
+{
+  "name": "weather-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AtmosEdge local dashboard and API for weather-market opportunity tracking.",
+  "scripts": {
+    "start": "node server.js"
+  }
+}
