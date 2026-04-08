@@ -6,6 +6,7 @@ const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_market
 const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
 const databaseUrl = process.env.DATABASE_URL;
 let databasePool = null;
+let lastDbDebugReason = null;
 
 function getDatabasePool() {
   if (!databaseUrl) {
@@ -484,6 +485,7 @@ function loadModelPayload() {
 async function queryJsonFromDb(sql) {
   const pool = getDatabasePool();
   if (!pool) {
+    lastDbDebugReason = "DATABASE_URL not set";
     return null;
   }
 
@@ -496,17 +498,21 @@ async function queryJsonFromDb(sql) {
 
     const raw = Object.values(firstRow)[0];
     if (!raw) {
+      lastDbDebugReason = "DB query returned no rows";
       return null;
     }
 
+    lastDbDebugReason = null;
     return typeof raw === "string" ? JSON.parse(raw) : raw;
   } catch (_error) {
+    lastDbDebugReason = _error && _error.message ? _error.message : "Unknown DB error";
     return null;
   }
 }
 
 async function queryDashboardPayloadFromDb() {
   if (!databaseUrl) {
+    lastDbDebugReason = "DATABASE_URL not set";
     return null;
   }
 
@@ -591,6 +597,7 @@ left join latest_quotes lq on lq.ticker = km.ticker;
 
 async function queryKalshiPayloadFromDb() {
   if (!databaseUrl) {
+    lastDbDebugReason = "DATABASE_URL not set";
     return null;
   }
 
@@ -1525,6 +1532,7 @@ async function buildDashboard() {
   return {
     updatedAt: new Date().toISOString(),
     dataBackend: liveModelPayload || liveKalshiPayload ? "postgres" : "static-json",
+    dataBackendReason: liveModelPayload || liveKalshiPayload ? null : lastDbDebugReason,
     metrics: buildMetrics(contracts),
     contracts,
     contractViews,
