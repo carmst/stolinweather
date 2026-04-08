@@ -6,11 +6,15 @@ from __future__ import annotations
 import json
 import math
 import re
+import subprocess
 import sys
+import argparse
 from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from load_json_to_postgres import DB_SCHEMA_PATH, resolve_connection, run_sql_file, sync_scored_payload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -484,6 +488,16 @@ def write_outputs(payload: dict[str, Any]) -> Path:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sync-db", action="store_true", help="Also upsert the scored payload into Postgres.")
+    parser.add_argument("--database-url", help="Postgres connection string. Falls back to DATABASE_URL.")
+    parser.add_argument(
+        "--init-db-schema",
+        action="store_true",
+        help="Apply db/schema.sql before syncing to Postgres.",
+    )
+    args = parser.parse_args()
+
     try:
         kalshi_payload = load_json(KALSHI_PATH)
         noaa_snapshots = load_weather_snapshots(NOAA_WEATHER_PATH)
@@ -500,6 +514,17 @@ def main() -> int:
     print(f"Scored {payload['market_count']} temperature markets")
     print(f"Latest file: {LATEST_PATH}")
     print(f"History file: {snapshot_path}")
+
+    if args.sync_db:
+        try:
+            psql, database_url = resolve_connection(args.database_url)
+            if args.init_db_schema:
+                run_sql_file(psql, database_url, DB_SCHEMA_PATH)
+            sync_scored_payload(psql, database_url, payload)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"Postgres sync error: {error}", file=sys.stderr)
+            return 1
+        print("Synced scored markets to Postgres")
 
     if payload["markets"]:
         first = payload["markets"][0]

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 from collections import defaultdict
@@ -13,6 +14,14 @@ from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from load_json_to_postgres import (
+    DB_SCHEMA_PATH,
+    resolve_connection,
+    run_sql_file,
+    sync_reference_tables,
+    sync_weather_payload,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -292,6 +301,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Pull NOAA/NWS forecast snapshots for tracked markets.")
     parser.add_argument("--config", type=Path, default=CONFIG_PATH, help="Path to the tracked market config JSON.")
     parser.add_argument("--print-latest", action="store_true", help="Print the normalized latest snapshot JSON to stdout.")
+    parser.add_argument("--sync-db", action="store_true", help="Also upsert the collected snapshots into Postgres.")
+    parser.add_argument("--database-url", help="Postgres connection string. Falls back to DATABASE_URL.")
+    parser.add_argument(
+        "--init-db-schema",
+        action="store_true",
+        help="Apply db/schema.sql before syncing to Postgres.",
+    )
     return parser.parse_args()
 
 
@@ -313,6 +329,18 @@ def main() -> int:
     print(f"Collected {len(snapshots)} NOAA market snapshots")
     print(f"Latest file: {LATEST_PATH}")
     print(f"History file: {snapshot_path}")
+
+    if args.sync_db:
+        try:
+            psql, database_url = resolve_connection(args.database_url)
+            if args.init_db_schema:
+                run_sql_file(psql, database_url, DB_SCHEMA_PATH)
+            sync_reference_tables(psql, database_url)
+            sync_weather_payload(psql, database_url, snapshots)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"Postgres sync error: {error}", file=sys.stderr)
+            return 1
+        print("Synced NOAA snapshots to Postgres")
 
     if args.print_latest:
         json.dump(snapshots, sys.stdout, indent=2)

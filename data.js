@@ -1,8 +1,11 @@
 const fs = require("fs");
 const path = require("path");
+const { execFileSync } = require("child_process");
 
 const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_markets.json");
 const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
+const databaseUrl = process.env.DATABASE_URL;
+const psqlBinary = process.env.PSQL_PATH || "psql";
 
 const marketSeeds = [
   {
@@ -356,6 +359,10 @@ const SERIES_SLUG_MAP = {
   KXHIGHTSFO: "highest-temperature-in-san-francisco",
 };
 
+const DASHBOARD_TIMEZONE = "America/New_York";
+const MIN_TRADABLE_CONTRACT_COST = 0.03;
+const MAX_TRADABLE_CONTRACT_COST = 0.97;
+
 function getConfidenceBand(score) {
   if (score >= 0.75) {
     return { label: "STRONG", className: "confidence-strong" };
@@ -374,11 +381,11 @@ function getConfidenceBand(score) {
 
 function getConfidenceBandFromExplanation(category, fallbackScore) {
   if (category === "tail") {
-    return { label: "STRONG", className: "confidence-strong" };
+    return { label: "MEDIUM", className: "confidence-medium" };
   }
 
   if (category === "lean") {
-    return { label: "MEDIUM", className: "confidence-medium" };
+    return { label: "WEAK", className: "confidence-weak" };
   }
 
   if (category === "live") {
@@ -392,8 +399,15 @@ function getConfidenceBandFromExplanation(category, fallbackScore) {
   return getConfidenceBand(fallbackScore);
 }
 
-function classifySetup(expectedValue, confidenceLabel) {
+function classifySetup(expectedValue, confidenceLabel, contractCost) {
   if (expectedValue == null || expectedValue <= 0) {
+    return { label: "PASS", className: "setup-pass", rowClass: "row-pass" };
+  }
+
+  if (
+    typeof contractCost === "number" &&
+    (contractCost < MIN_TRADABLE_CONTRACT_COST || contractCost > MAX_TRADABLE_CONTRACT_COST)
+  ) {
     return { label: "PASS", className: "setup-pass", rowClass: "row-pass" };
   }
 
@@ -444,6 +458,184 @@ function loadKalshiPayload() {
 function loadModelPayload() {
   try {
     const raw = fs.readFileSync(modelLatestPath, "utf8");
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function queryDashboardPayloadFromDb() {
+  if (!databaseUrl) {
+    return null;
+  }
+
+  const sql = `
+with latest_scores as (
+  select distinct on (ticker) *
+  from app.scored_market_snapshots
+  order by ticker, pulled_at desc
+),
+latest_quotes as (
+  select distinct on (ticker) *
+  from app.kalshi_market_snapshots
+  order by ticker, pulled_at desc
+)
+select json_build_object(
+  'pulled_at',
+  max(ls.pulled_at),
+  'source',
+  'postgres-scored',
+  'markets',
+  coalesce(
+    json_agg(
+      json_build_object(
+        'pulled_at', ls.pulled_at,
+        'ticker', km.ticker,
+        'event_ticker', km.event_ticker,
+        'series_ticker', km.series_ticker,
+        'series_title', ke.series_title,
+        'series_slug', ke.series_slug,
+        'title', km.title,
+        'subtitle', km.subtitle,
+        'status', km.status,
+        'market_type', km.market_type,
+        'strike_type', km.strike_type,
+        'close_time', ke.close_time,
+        'open_time', ke.open_time,
+        'result', km.result,
+        'yes_bid_dollars', lq.yes_bid_dollars,
+        'yes_ask_dollars', lq.yes_ask_dollars,
+        'no_bid_dollars', lq.no_bid_dollars,
+        'no_ask_dollars', lq.no_ask_dollars,
+        'last_price_dollars', lq.last_price_dollars,
+        'volume', lq.volume,
+        'volume_24h', lq.volume_24h,
+        'implied_probability', lq.implied_probability,
+        'floor_strike', km.floor_strike,
+        'cap_strike', km.cap_strike,
+        'functional_strike', km.functional_strike,
+        'custom_strike', km.custom_strike,
+        'forecast_date', ls.forecast_date,
+        'matched_location', ls.matched_location,
+        'matched_latitude', ls.matched_latitude,
+        'matched_longitude', ls.matched_longitude,
+        'forecast_max_f', ls.forecast_max_f,
+        'forecast_min_f', ls.forecast_min_f,
+        'adjusted_forecast_max_f', ls.adjusted_forecast_max_f,
+        'forecast_sigma_f', ls.forecast_sigma_f,
+        'noaa_forecast_max_f', ls.noaa_forecast_max_f,
+        'open_meteo_forecast_max_f', ls.open_meteo_forecast_max_f,
+        'forecast_source_spread_f', ls.forecast_source_spread_f,
+        'lead_bucket', ls.lead_bucket,
+        'model_probability', ls.model_probability,
+        'edge', ls.edge,
+        'signal_short', ls.signal_short,
+        'market_context', ls.market_context,
+        'model_signal', ls.model_signal,
+        'weather_market_id', ls.weather_market_id
+      )
+      order by ls.pulled_at desc, km.ticker
+    ),
+    '[]'::json
+  )
+)::text
+from latest_scores ls
+join app.kalshi_markets km on km.ticker = ls.ticker
+join app.kalshi_events ke on ke.event_ticker = km.event_ticker
+left join latest_quotes lq on lq.ticker = km.ticker;
+`;
+
+  try {
+    const raw = execFileSync(
+      psqlBinary,
+      [databaseUrl, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    ).trim();
+
+    if (!raw) {
+      return null;
+    }
+
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function queryKalshiPayloadFromDb() {
+  if (!databaseUrl) {
+    return null;
+  }
+
+  const sql = `
+with latest_quotes as (
+  select distinct on (ticker) *
+  from app.kalshi_market_snapshots
+  order by ticker, pulled_at desc
+)
+select json_build_object(
+  'pulled_at',
+  max(lq.pulled_at),
+  'source',
+  'postgres-kalshi',
+  'markets',
+  coalesce(
+    json_agg(
+      json_build_object(
+        'pulled_at', lq.pulled_at,
+        'ticker', km.ticker,
+        'event_ticker', km.event_ticker,
+        'series_ticker', km.series_ticker,
+        'series_title', ke.series_title,
+        'series_slug', ke.series_slug,
+        'title', km.title,
+        'subtitle', km.subtitle,
+        'status', km.status,
+        'market_type', km.market_type,
+        'strike_type', km.strike_type,
+        'close_time', ke.close_time,
+        'open_time', ke.open_time,
+        'result', km.result,
+        'yes_bid_dollars', lq.yes_bid_dollars,
+        'yes_ask_dollars', lq.yes_ask_dollars,
+        'no_bid_dollars', lq.no_bid_dollars,
+        'no_ask_dollars', lq.no_ask_dollars,
+        'last_price_dollars', lq.last_price_dollars,
+        'volume', lq.volume,
+        'volume_24h', lq.volume_24h,
+        'implied_probability', lq.implied_probability,
+        'floor_strike', km.floor_strike,
+        'cap_strike', km.cap_strike,
+        'functional_strike', km.functional_strike,
+        'custom_strike', km.custom_strike
+      )
+      order by lq.pulled_at desc, km.ticker
+    ),
+    '[]'::json
+  )
+)::text
+from latest_quotes lq
+join app.kalshi_markets km on km.ticker = lq.ticker
+join app.kalshi_events ke on ke.event_ticker = km.event_ticker;
+`;
+
+  try {
+    const raw = execFileSync(
+      psqlBinary,
+      [databaseUrl, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }
+    ).trim();
+
+    if (!raw) {
+      return null;
+    }
+
     return JSON.parse(raw);
   } catch (_error) {
     return null;
@@ -629,14 +821,36 @@ function addDays(dateString, offset) {
   return date.toISOString().slice(0, 10);
 }
 
+function getLocalDateString(timeZone) {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = formatter.formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
 function filterToTodayAndTomorrow(markets, pulledAt) {
-  const referenceDate = getReferenceDate(markets, pulledAt);
+  const referenceDate = getLocalDateString(DASHBOARD_TIMEZONE) || getReferenceDate(markets, pulledAt);
   const allowedDates = new Set([referenceDate, addDays(referenceDate, 1)]);
 
   return markets.filter((market) => {
     const eventDate = extractEventDate(market);
     return eventDate ? allowedDates.has(eventDate) : true;
   });
+}
+
+function isTradableContractCost(contractCost) {
+  return (
+    typeof contractCost === "number" &&
+    contractCost >= MIN_TRADABLE_CONTRACT_COST &&
+    contractCost <= MAX_TRADABLE_CONTRACT_COST
+  );
 }
 
 function selectBestContractPerCity(markets) {
@@ -803,7 +1017,8 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
   const eventDate = extractEventDate(market);
   const driverInsight = formatDriverSignal(market);
   const confidenceBand = getConfidenceBandFromExplanation(driverInsight.category, confidenceScore);
-  const setup = classifySetup(expectedValue, confidenceBand.label);
+  const isTradable = isTradableContractCost(contractCost);
+  const setup = classifySetup(expectedValue, confidenceBand.label, contractCost);
 
   return {
     contract: cleanKalshiContractLabel(market),
@@ -826,6 +1041,7 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     edgeClass: edge > 0.04 ? "positive" : edge < -0.04 ? "negative" : "neutral",
     recommendedSide: pricing.recommendedSide,
     contractCost,
+    isTradable,
     contractCostDisplay: `${pricing.recommendedSide.toUpperCase()} ${formatCurrency(contractCost)}`,
     expectedValue,
     expectedValueDisplay:
@@ -1140,8 +1356,10 @@ function normalizeScoredContracts(markets) {
     );
   });
 
+  const tradable = normalized.filter((market) => market.isTradable && market.status !== "settled");
+
   return {
-    bestByCity: rankDisplayedContracts(selectBestContractPerCity(normalized)),
+    bestByCity: rankDisplayedContracts(selectBestContractPerCity(tradable)),
     allContracts: sortContracts(normalized),
   };
 }
@@ -1184,15 +1402,43 @@ function normalizeKalshiContracts(markets) {
     );
   });
 
+  const tradable = normalized.filter((market) => market.isTradable && market.status !== "settled");
+
   return {
-    bestByCity: rankDisplayedContracts(selectBestContractPerCity(normalized)),
+    bestByCity: rankDisplayedContracts(selectBestContractPerCity(tradable)),
     allContracts: sortContracts(normalized),
   };
 }
 
 function buildMetrics(contracts) {
+  if (!Array.isArray(contracts) || contracts.length === 0) {
+    return [
+      {
+        eyebrow: "Open Opportunities",
+        value: "0",
+        valueClass: "metric-value-warning",
+        subtle: "No tradable contracts in the current window",
+      },
+      {
+        eyebrow: "Avg Edge vs Kalshi",
+        value: "--",
+        valueClass: "",
+        subtle: "Waiting on a qualifying setup",
+      },
+      {
+        eyebrow: "Best Current Signal",
+        value: "None",
+        valueClass: "",
+        subtle: "Penny and stale setups are filtered out",
+      },
+    ];
+  }
+
   const openOpportunities = contracts.filter((contract) => contract.edge > 0.04);
-  const avgEdge = openOpportunities.reduce((sum, contract) => sum + contract.edge, 0) / openOpportunities.length;
+  const avgEdge =
+    openOpportunities.length > 0
+      ? openOpportunities.reduce((sum, contract) => sum + contract.edge, 0) / openOpportunities.length
+      : null;
   const strongest = [...contracts].sort((a, b) => b.edge * b.confidence - a.edge * a.confidence)[0];
 
   return [
@@ -1204,8 +1450,8 @@ function buildMetrics(contracts) {
     },
     {
       eyebrow: "Avg Edge vs Kalshi",
-      value: formatSignedPct(avgEdge),
-      valueClass: "metric-value-positive",
+      value: avgEdge == null ? "--" : formatSignedPct(avgEdge),
+      valueClass: avgEdge != null && avgEdge > 0 ? "metric-value-positive" : "",
       subtle: `Across ${openOpportunities.length} qualified contracts`,
     },
     {
@@ -1255,8 +1501,8 @@ function buildBacktestReadiness(contracts) {
 }
 
 function buildDashboard() {
-  const modelPayload = loadModelPayload();
-  const kalshiPayload = loadKalshiPayload();
+  const modelPayload = queryDashboardPayloadFromDb() || loadModelPayload();
+  const kalshiPayload = queryKalshiPayloadFromDb() || loadKalshiPayload();
   const mergedPayload = mergeMarketPayloads(kalshiPayload, modelPayload);
   const contractViews =
     mergedPayload && Array.isArray(mergedPayload.markets) && mergedPayload.markets.length > 0

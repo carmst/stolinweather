@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from load_json_to_postgres import DB_SCHEMA_PATH, resolve_connection, run_sql_file, sync_bets_payload
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -134,6 +137,13 @@ def parse_args() -> argparse.Namespace:
         "--date",
         help="Resolve a specific ledger file in output/bets/snapshots/YYYY-MM-DD.json. Defaults to latest_daily_bets.json.",
     )
+    parser.add_argument("--sync-db", action="store_true", help="Also upsert the resolved ledger into Postgres.")
+    parser.add_argument("--database-url", help="Postgres connection string. Falls back to DATABASE_URL.")
+    parser.add_argument(
+        "--init-db-schema",
+        action="store_true",
+        help="Apply db/schema.sql before syncing to Postgres.",
+    )
     return parser.parse_args()
 
 
@@ -165,6 +175,16 @@ def main() -> int:
     print(f"Total PnL/contract: {resolved_payload['total_pnl_per_contract']:+.2f}")
     print(f"Total PnL dollars: {resolved_payload['total_pnl_dollars']:+.2f}")
     print(f"Resolved file: {output_path}")
+    if args.sync_db:
+        try:
+            psql, database_url = resolve_connection(args.database_url)
+            if args.init_db_schema:
+                run_sql_file(psql, database_url, DB_SCHEMA_PATH)
+            sync_bets_payload(psql, database_url, resolved_payload)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"Postgres sync error: {error}", file=sys.stderr)
+            return 1
+        print("Synced resolved bets to Postgres")
     return 0
 
 

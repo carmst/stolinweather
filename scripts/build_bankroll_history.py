@@ -5,8 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+
+from load_json_to_postgres import DB_SCHEMA_PATH, resolve_connection, run_sql_file, sync_bankroll_payload
 from typing import Any
 
 
@@ -84,6 +87,13 @@ def parse_args() -> argparse.Namespace:
         default=100.0,
         help="Initial bankroll before the first resolved betting day. Defaults to 100.",
     )
+    parser.add_argument("--sync-db", action="store_true", help="Also upsert bankroll history into Postgres.")
+    parser.add_argument("--database-url", help="Postgres connection string. Falls back to DATABASE_URL.")
+    parser.add_argument(
+        "--init-db-schema",
+        action="store_true",
+        help="Apply db/schema.sql before syncing to Postgres.",
+    )
     return parser.parse_args()
 
 
@@ -106,6 +116,16 @@ def main() -> int:
     print(f"Resolved days: {history['day_count']}")
     print(f"History file: {HISTORY_PATH}")
     print(f"Latest summary: {LATEST_PATH}")
+    if args.sync_db:
+        try:
+            psql, database_url = resolve_connection(args.database_url)
+            if args.init_db_schema:
+                run_sql_file(psql, database_url, DB_SCHEMA_PATH)
+            sync_bankroll_payload(psql, database_url, history)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"Postgres sync error: {error}", file=sys.stderr)
+            return 1
+        print("Synced bankroll history to Postgres")
     return 0
 
 

@@ -8,6 +8,7 @@ import json
 import math
 import os
 import socket
+import subprocess
 import sys
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -16,6 +17,14 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
+from load_json_to_postgres import (
+    DB_SCHEMA_PATH,
+    resolve_connection,
+    run_sql_file,
+    sync_history_payload,
+    sync_reference_tables,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -95,7 +104,15 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     return 2 * radius * math.asin(math.sqrt(a))
 
 
-def find_station(token: str, market: dict[str, Any]) -> dict[str, Any]:
+def station_covers_range(station: dict[str, Any], start_date: date, end_date: date) -> bool:
+    min_date = station.get("mindate")
+    max_date = station.get("maxdate")
+    if not min_date or not max_date:
+        return False
+    return min_date[:10] <= start_date.isoformat() and max_date[:10] >= end_date.isoformat()
+
+
+def find_candidate_stations(token: str, market: dict[str, Any], start_date: date, end_date: date) -> list[dict[str, Any]]:
     lat = float(market["latitude"])
     lon = float(market["longitude"])
     extent = f"{lat - 1.0},{lon - 1.0},{lat + 1.0},{lon + 1.0}"
@@ -121,10 +138,11 @@ def find_station(token: str, market: dict[str, Any]) -> dict[str, Any]:
         if station_lat is None or station_lon is None:
             continue
         distance = haversine_miles(lat, lon, float(station_lat), float(station_lon))
-        ranked.append((distance, -float(station.get("datacoverage", 0)), station))
+        range_penalty = 0 if station_covers_range(station, start_date, end_date) else 1
+        ranked.append((range_penalty, distance, -float(station.get("datacoverage", 0)), station))
 
-    ranked.sort(key=lambda item: (item[0], item[1]))
-    return ranked[0][2]
+    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
+    return [item[3] for item in ranked]
 
 
 def daterange_chunks(start_date: date, end_date: date) -> list[tuple[date, date]]:
@@ -229,13 +247,26 @@ def run_collection(config_path: Path, lookback_years: int, resume: bool) -> tupl
     existing_entries = load_existing_entries() if resume else {}
     entries = []
     for market in markets:
-        if market["market_id"] in existing_entries:
-            entries.append(existing_entries[market["market_id"]])
+        existing_entry = existing_entries.get(market["market_id"])
+        if existing_entry and existing_entry.get("observations"):
+            entries.append(existing_entry)
             continue
 
-        station = find_station(token, market)
-        rows = collect_station_history(token, station["id"], start_date, end_date)
-        entries.append(normalize_history_entry(market, station, rows, pulled_at))
+        candidate_stations = find_candidate_stations(token, market, start_date, end_date)
+        selected_station = None
+        selected_rows: list[dict[str, Any]] = []
+
+        for station in candidate_stations[:10]:
+            rows = collect_station_history(token, station["id"], start_date, end_date)
+            if rows:
+                selected_station = station
+                selected_rows = rows
+                break
+
+        if selected_station is None:
+            selected_station = candidate_stations[0]
+
+        entries.append(normalize_history_entry(market, selected_station, selected_rows, pulled_at))
         write_outputs(
             {
                 "pulled_at": pulled_at,
@@ -265,6 +296,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     parser.add_argument("--lookback-years", type=int, default=5)
     parser.add_argument("--resume", action="store_true", help="Resume from the latest saved history file when present.")
+    parser.add_argument("--sync-db", action="store_true", help="Also upsert collected observations into Postgres.")
+    parser.add_argument("--database-url", help="Postgres connection string. Falls back to DATABASE_URL.")
+    parser.add_argument(
+        "--init-db-schema",
+        action="store_true",
+        help="Apply db/schema.sql before syncing to Postgres.",
+    )
     return parser.parse_args()
 
 
@@ -286,6 +324,17 @@ def main() -> int:
     print(f"Collected history for {len(payload['locations'])} locations")
     print(f"Latest file: {LATEST_PATH}")
     print(f"Snapshot file: {snapshot_path}")
+    if args.sync_db:
+        try:
+            psql, database_url = resolve_connection(args.database_url)
+            if args.init_db_schema:
+                run_sql_file(psql, database_url, DB_SCHEMA_PATH)
+            sync_reference_tables(psql, database_url)
+            sync_history_payload(psql, database_url, payload)
+        except (RuntimeError, subprocess.CalledProcessError) as error:
+            print(f"Postgres sync error: {error}", file=sys.stderr)
+            return 1
+        print("Synced NOAA history to Postgres")
     return 0
 
 
