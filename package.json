@@ -5,5 +5,8 @@
   "description": "AtmosEdge local dashboard and API for weather-market opportunity tracking.",
   "scripts": {
     "start": "node server.js"
+  },
+  "dependencies": {
+    "pg": "^8.20.0"
   }
 }

@@ -36,11 +36,11 @@ function sendFile(response, filePath) {
   });
 }
 
-const server = http.createServer((request, response) => {
+const server = http.createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
   if (url.pathname === "/api/dashboard") {
-    sendJson(response, 200, buildDashboard());
+    sendJson(response, 200, await buildDashboard());
     return;
   }
 

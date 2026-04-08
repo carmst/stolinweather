@@ -1,11 +1,28 @@
 const fs = require("fs");
 const path = require("path");
-const { execFileSync } = require("child_process");
+const { Pool } = require("pg");
 
 const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_markets.json");
 const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
 const databaseUrl = process.env.DATABASE_URL;
-const psqlBinary = process.env.PSQL_PATH || "psql";
+let databasePool = null;
+
+function getDatabasePool() {
+  if (!databaseUrl) {
+    return null;
+  }
+
+  if (!databasePool) {
+    const requiresSsl = /sslmode=require/i.test(databaseUrl) || databaseUrl.includes("supabase.com");
+    databasePool = new Pool({
+      connectionString: databaseUrl,
+      ssl: requiresSsl ? { rejectUnauthorized: false } : undefined,
+      max: 3,
+    });
+  }
+
+  return databasePool;
+}
 
 const marketSeeds = [
   {
@@ -464,7 +481,31 @@ function loadModelPayload() {
   }
 }
 
-function queryDashboardPayloadFromDb() {
+async function queryJsonFromDb(sql) {
+  const pool = getDatabasePool();
+  if (!pool) {
+    return null;
+  }
+
+  try {
+    const result = await pool.query(sql);
+    const firstRow = result.rows?.[0];
+    if (!firstRow) {
+      return null;
+    }
+
+    const raw = Object.values(firstRow)[0];
+    if (!raw) {
+      return null;
+    }
+
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
+  } catch (_error) {
+    return null;
+  }
+}
+
+async function queryDashboardPayloadFromDb() {
   if (!databaseUrl) {
     return null;
   }
@@ -545,27 +586,10 @@ join app.kalshi_events ke on ke.event_ticker = km.event_ticker
 left join latest_quotes lq on lq.ticker = km.ticker;
 `;
 
-  try {
-    const raw = execFileSync(
-      psqlBinary,
-      [databaseUrl, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    ).trim();
-
-    if (!raw) {
-      return null;
-    }
-
-    return JSON.parse(raw);
-  } catch (_error) {
-    return null;
-  }
+  return queryJsonFromDb(sql);
 }
 
-function queryKalshiPayloadFromDb() {
+async function queryKalshiPayloadFromDb() {
   if (!databaseUrl) {
     return null;
   }
@@ -622,24 +646,7 @@ join app.kalshi_markets km on km.ticker = lq.ticker
 join app.kalshi_events ke on ke.event_ticker = km.event_ticker;
 `;
 
-  try {
-    const raw = execFileSync(
-      psqlBinary,
-      [databaseUrl, "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "pipe"],
-      }
-    ).trim();
-
-    if (!raw) {
-      return null;
-    }
-
-    return JSON.parse(raw);
-  } catch (_error) {
-    return null;
-  }
+  return queryJsonFromDb(sql);
 }
 
 function mergeMarketPayloads(kalshiPayload, modelPayload) {
@@ -1500,9 +1507,11 @@ function buildBacktestReadiness(contracts) {
   ];
 }
 
-function buildDashboard() {
-  const modelPayload = queryDashboardPayloadFromDb() || loadModelPayload();
-  const kalshiPayload = queryKalshiPayloadFromDb() || loadKalshiPayload();
+async function buildDashboard() {
+  const liveModelPayload = await queryDashboardPayloadFromDb();
+  const liveKalshiPayload = await queryKalshiPayloadFromDb();
+  const modelPayload = liveModelPayload || loadModelPayload();
+  const kalshiPayload = liveKalshiPayload || loadKalshiPayload();
   const mergedPayload = mergeMarketPayloads(kalshiPayload, modelPayload);
   const contractViews =
     mergedPayload && Array.isArray(mergedPayload.markets) && mergedPayload.markets.length > 0
@@ -1515,6 +1524,7 @@ function buildDashboard() {
 
   return {
     updatedAt: new Date().toISOString(),
+    dataBackend: liveModelPayload || liveKalshiPayload ? "postgres" : "static-json",
     metrics: buildMetrics(contracts),
     contracts,
     contractViews,
