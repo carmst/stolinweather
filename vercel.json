@@ -4,7 +4,10 @@
   "cleanUrls": true,
   "functions": {
     "api/dashboard.js": {
-      "includeFiles": "output/**"
+      "includeFiles": [
+        "output/kalshi/latest_markets.json",
+        "output/models/latest_scored_markets.json"
+      ]
     }
   }
 }
