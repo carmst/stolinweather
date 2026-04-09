@@ -15,6 +15,7 @@ from load_json_to_postgres import DB_SCHEMA_PATH, resolve_connection, run_sql_fi
 
 ROOT = Path(__file__).resolve().parents[1]
 HISTORY_PATH = ROOT / "output" / "history" / "latest_noaa_history.json"
+PRELIMINARY_PATH = ROOT / "output" / "preliminary" / "latest_preliminary_daily_highs.json"
 BET_DIR = ROOT / "output" / "bets"
 LATEST_BETS_PATH = BET_DIR / "latest_daily_bets.json"
 RESOLVED_DIR = BET_DIR / "resolved"
@@ -40,6 +41,22 @@ def build_history_index(payload: dict[str, Any]) -> dict[tuple[str, str], float]
             tmax_f = observation.get("tmax_f")
             if date_key and isinstance(tmax_f, (int, float)):
                 index[(market_id, date_key)] = float(tmax_f)
+    return index
+
+
+def build_preliminary_index(payload: dict[str, Any]) -> dict[tuple[str, str], dict[str, Any]]:
+    index: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in payload.get("rows", []):
+        market_id = row.get("market_id")
+        forecast_date = row.get("forecast_date")
+        preliminary_high = row.get("preliminary_high_f")
+        if market_id and forecast_date and isinstance(preliminary_high, (int, float)):
+            index[(market_id, forecast_date)] = {
+                "preliminary_high_f": float(preliminary_high),
+                "pulled_at": row.get("pulled_at"),
+                "provider": row.get("provider"),
+                "stations": row.get("stations", []),
+            }
     return index
 
 
@@ -93,29 +110,65 @@ def resolve_bet(bet: dict[str, Any], observed_high: float) -> dict[str, Any]:
     }
 
 
-def resolve_payload(bet_payload: dict[str, Any], history_index: dict[tuple[str, str], float]) -> dict[str, Any]:
+def soft_resolve_bet(bet: dict[str, Any], preliminary: dict[str, Any]) -> dict[str, Any]:
+    preliminary_high = preliminary["preliminary_high_f"]
+    yes_outcome = contract_yes_outcome(bet, preliminary_high)
+    recommended_side = bet.get("recommended_side")
+    provisional_bet_won = None
+    if yes_outcome is not None:
+        provisional_bet_won = (recommended_side == "yes" and yes_outcome) or (
+            recommended_side == "no" and not yes_outcome
+        )
+
+    return {
+        **bet,
+        "status": "soft_resolved",
+        "resolved_at": None,
+        "observed_high_f": None,
+        "bet_won": None,
+        "pnl_per_contract": None,
+        "pnl_dollars": None,
+        "preliminary_observed_high_f": round(preliminary_high, 2),
+        "preliminary_contract_yes_outcome": yes_outcome,
+        "preliminary_bet_won": provisional_bet_won,
+        "preliminary_source": preliminary.get("provider"),
+        "preliminary_pulled_at": preliminary.get("pulled_at"),
+        "preliminary_stations": preliminary.get("stations", []),
+    }
+
+
+def resolve_payload(
+    bet_payload: dict[str, Any],
+    history_index: dict[tuple[str, str], float],
+    preliminary_index: dict[tuple[str, str], dict[str, Any]],
+) -> dict[str, Any]:
     resolved_bets = []
     for bet in bet_payload.get("bets", []):
         key = (bet.get("weather_market_id"), bet.get("forecast_date"))
         observed_high = history_index.get(key)
         if observed_high is None:
-            resolved_bets.append(
-                {
-                    **bet,
-                    "status": "pending",
-                    "resolved_at": None,
-                    "observed_high_f": None,
-                    "bet_won": None,
-                    "pnl_per_contract": None,
-                    "pnl_dollars": None,
-                }
-            )
+            preliminary = preliminary_index.get(key)
+            if preliminary is None:
+                resolved_bets.append(
+                    {
+                        **bet,
+                        "status": "pending",
+                        "resolved_at": None,
+                        "observed_high_f": None,
+                        "bet_won": None,
+                        "pnl_per_contract": None,
+                        "pnl_dollars": None,
+                    }
+                )
+            else:
+                resolved_bets.append(soft_resolve_bet(bet, preliminary))
             continue
         resolved_bets.append(resolve_bet(bet, observed_high))
 
     wins = sum(1 for bet in resolved_bets if bet.get("bet_won") is True)
     losses = sum(1 for bet in resolved_bets if bet.get("bet_won") is False)
     pending = sum(1 for bet in resolved_bets if bet.get("status") == "pending")
+    soft_resolved = sum(1 for bet in resolved_bets if bet.get("status") == "soft_resolved")
     total_pnl = round(sum(float(bet.get("pnl_per_contract") or 0.0) for bet in resolved_bets), 4)
     total_pnl_dollars = round(sum(float(bet.get("pnl_dollars") or 0.0) for bet in resolved_bets), 4)
 
@@ -125,6 +178,7 @@ def resolve_payload(bet_payload: dict[str, Any], history_index: dict[tuple[str, 
         "wins": wins,
         "losses": losses,
         "pending": pending,
+        "soft_resolved": soft_resolved,
         "total_pnl_per_contract": total_pnl,
         "total_pnl_dollars": total_pnl_dollars,
         "bets": resolved_bets,
@@ -161,7 +215,12 @@ def main() -> int:
 
     bet_payload = load_json(ledger_path)
     history_index = build_history_index(load_json(HISTORY_PATH))
-    resolved_payload = resolve_payload(bet_payload, history_index)
+    preliminary_index = (
+        build_preliminary_index(load_json(PRELIMINARY_PATH))
+        if PRELIMINARY_PATH.exists()
+        else {}
+    )
+    resolved_payload = resolve_payload(bet_payload, history_index, preliminary_index)
 
     RESOLVED_DIR.mkdir(parents=True, exist_ok=True)
     output_path = RESOLVED_DIR / f"{resolved_payload['target_date']}.json"
@@ -171,7 +230,10 @@ def main() -> int:
         f"Resolved {len(resolved_payload['bets']) - resolved_payload['pending']} bets "
         f"for {resolved_payload['target_date']}"
     )
-    print(f"Wins: {resolved_payload['wins']} | Losses: {resolved_payload['losses']} | Pending: {resolved_payload['pending']}")
+    print(
+        f"Wins: {resolved_payload['wins']} | Losses: {resolved_payload['losses']} | "
+        f"Soft: {resolved_payload.get('soft_resolved', 0)} | Pending: {resolved_payload['pending']}"
+    )
     print(f"Total PnL/contract: {resolved_payload['total_pnl_per_contract']:+.2f}")
     print(f"Total PnL dollars: {resolved_payload['total_pnl_dollars']:+.2f}")
     print(f"Resolved file: {output_path}")
