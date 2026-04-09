@@ -100,13 +100,13 @@ function renderContracts(contracts) {
               </div>
             </td>
             <td class="mono">${row.location}</td>
-            <td>${row.kalshiProbDisplay}</td>
-            <td>${row.modelProbDisplay}</td>
+            <td>${formatNoaaHigh(row)}</td>
             <td class="positive">${row.modelForecastDisplay}</td>
-            <td>${row.contractCostDisplay || "--"}</td>
-            <td>${row.payoutRatioDisplay}</td>
-            <td class="mono">${row.signalDriver}</td>
             <td><span class="confidence-pill ${row.confidenceClass}">${row.confidenceLabel}</span></td>
+            <td>${row.kalshiProbDisplay}</td>
+            <td>${row.contractCostDisplay || "--"}</td>
+            <td class="mono">${row.signalDriver}</td>
+            <td class="${row.expectedValue > 0 ? "positive" : row.expectedValue < 0 ? "negative" : ""}">${formatExpectedValue(row)}</td>
             <td><a class="action-link" href="${row.inspectUrl || "#"}" target="_blank" rel="noreferrer">Inspect ↗</a></td>
           </tr>
         `
@@ -114,6 +114,32 @@ function renderContracts(contracts) {
       .join("")
   );
 
+}
+
+function formatNoaaHigh(row) {
+  if (typeof row.noaaForecastMaxF === "number") {
+    return `${Math.round(row.noaaForecastMaxF)}F`;
+  }
+  return "--";
+}
+
+function formatExpectedValue(row) {
+  if (typeof row.expectedValue !== "number") {
+    return "--";
+  }
+
+  const winProb = typeof row.winProbability === "number" ? row.winProbability : null;
+  const lossProb = winProb == null ? null : 1 - winProb;
+  const cost = typeof row.contractCost === "number" ? row.contractCost : null;
+  const profitIfWin = cost == null ? null : 1 - cost;
+
+  if (winProb == null || lossProb == null || cost == null || profitIfWin == null) {
+    return row.expectedValueDisplay || "--";
+  }
+
+  const ev = winProb * profitIfWin - lossProb * cost;
+  const sign = ev > 0 ? "+" : "";
+  return `${sign}$${ev.toFixed(2)}`;
 }
 
 function renderCards(target, cards, className, badgeClass = "") {
