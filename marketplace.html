@@ -1,292 +1,162 @@
 <!DOCTYPE html>
-
-<html class="dark" lang="en"><head>
-<meta charset="utf-8"/>
-<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>STOLIN WEATHER | Marketplace</title>
-<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;600&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
-<script id="tailwind-config">
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>STOLIN WEATHER | Marketplace</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+      rel="stylesheet"
+    />
+    <script id="tailwind-config">
       tailwind.config = {
         darkMode: "class",
         theme: {
           extend: {
-            "colors": {
-                    "error-dim": "#d7383b",
-                    "primary-fixed": "#6debfd",
-                    "surface-container-low": "#0c1518",
-                    "tertiary": "#ccf9ff",
-                    "error": "#ff716c",
-                    "secondary-fixed": "#ffc4b3",
-                    "surface": "#070f12",
-                    "on-error-container": "#ffa8a3",
-                    "surface-bright": "#222e33",
-                    "tertiary-container": "#93f1fd",
-                    "on-secondary-fixed-variant": "#972900",
-                    "surface-container": "#111b1f",
-                    "on-primary-fixed-variant": "#005f69",
-                    "outline-variant": "#41494d",
-                    "on-surface": "#f0f8fc",
-                    "background": "#070f12",
-                    "inverse-surface": "#f2fbff",
-                    "on-tertiary-fixed": "#00474d",
-                    "on-secondary": "#420d00",
-                    "primary-fixed-dim": "#5dddee",
-                    "surface-variant": "#1c272c",
-                    "on-primary-fixed": "#004148",
-                    "tertiary-fixed-dim": "#85e3ef",
-                    "surface-tint": "#6debfd",
-                    "on-primary": "#00555e",
-                    "on-secondary-fixed": "#651900",
-                    "secondary": "#ff7348",
-                    "inverse-primary": "#006974",
-                    "outline": "#6e777a",
-                    "error-container": "#9f0519",
-                    "surface-container-highest": "#1c272c",
-                    "surface-container-high": "#172125",
-                    "tertiary-dim": "#85e3ef",
-                    "on-background": "#f0f8fc",
-                    "primary": "#6debfd",
-                    "inverse-on-surface": "#4e565a",
-                    "on-primary-container": "#00272c",
-                    "on-tertiary": "#00646d",
-                    "primary-dim": "#5dddee",
-                    "secondary-dim": "#ff7348",
-                    "on-tertiary-container": "#005b63",
-                    "tertiary-fixed": "#93f1fd",
-                    "on-tertiary-fixed-variant": "#00666f",
-                    "secondary-container": "#a12d01",
-                    "on-surface-variant": "#a4acb0",
-                    "surface-container-lowest": "#000000",
-                    "on-error": "#490006",
-                    "primary-container": "#18b1c1",
-                    "on-secondary-container": "#ffe6df",
-                    "secondary-fixed-dim": "#ffb19a",
-                    "surface-dim": "#070f12"
+            colors: {
+              "error-dim": "#d7383b",
+              "primary-fixed": "#6debfd",
+              "surface-container-low": "#0c1518",
+              tertiary: "#ccf9ff",
+              error: "#ff716c",
+              "secondary-fixed": "#ffc4b3",
+              surface: "#070f12",
+              "on-error-container": "#ffa8a3",
+              "surface-bright": "#222e33",
+              "tertiary-container": "#93f1fd",
+              "on-secondary-fixed-variant": "#972900",
+              "surface-container": "#111b1f",
+              "on-primary-fixed-variant": "#005f69",
+              "outline-variant": "#41494d",
+              "on-surface": "#f0f8fc",
+              background: "#070f12",
+              "inverse-surface": "#f2fbff",
+              "on-tertiary-fixed": "#00474d",
+              "on-secondary": "#420d00",
+              "primary-fixed-dim": "#5dddee",
+              "surface-variant": "#1c272c",
+              "on-primary-fixed": "#004148",
+              "tertiary-fixed-dim": "#85e3ef",
+              "surface-tint": "#6debfd",
+              "on-primary": "#00555e",
+              "on-secondary-fixed": "#651900",
+              secondary: "#ff7348",
+              "inverse-primary": "#006974",
+              outline: "#6e777a",
+              "error-container": "#9f0519",
+              "surface-container-highest": "#1c272c",
+              "surface-container-high": "#172125",
+              "tertiary-dim": "#85e3ef",
+              "on-background": "#f0f8fc",
+              primary: "#6debfd",
+              "inverse-on-surface": "#4e565a",
+              "on-primary-container": "#00272c",
+              "on-tertiary": "#00646d",
+              "primary-dim": "#5dddee",
+              "secondary-dim": "#ff7348",
+              "on-tertiary-container": "#005b63",
+              "tertiary-fixed": "#93f1fd",
+              "on-tertiary-fixed-variant": "#00666f",
+              "secondary-container": "#a12d01",
+              "on-surface-variant": "#a4acb0",
+              "surface-container-lowest": "#000000",
+              "on-error": "#490006",
+              "primary-container": "#18b1c1",
+              "on-secondary-container": "#ffe6df",
+              "secondary-fixed-dim": "#ffb19a",
+              "surface-dim": "#070f12",
             },
-            "borderRadius": {
-                    "DEFAULT": "0.25rem",
-                    "lg": "0.5rem",
-                    "xl": "0.75rem",
-                    "full": "9999px"
+            borderRadius: {
+              DEFAULT: "0.25rem",
+              lg: "0.5rem",
+              xl: "0.75rem",
+              full: "9999px",
             },
-            "fontFamily": {
-                    "headline": ["Manrope"],
-                    "body": ["Manrope"],
-                    "label": ["Inter"]
-            }
+            fontFamily: {
+              headline: ["Manrope"],
+              body: ["Manrope"],
+              label: ["Inter"],
+            },
           },
         },
-      }
+      };
     </script>
-<style>
-        body { background-color: #070f12; color: #f0f8fc; -webkit-font-smoothing: antialiased; }
-        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
-        .glass-panel { background: rgba(28, 39, 44, 0.4); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
-        .hero-gradient { background: radial-gradient(circle at 50% 50%, rgba(109, 235, 253, 0.08) 0%, transparent 70%); }
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+      }
+      .glass-card {
+        background: rgba(28, 39, 44, 0.4);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+      }
+      .text-glow {
+        text-shadow: 0 0 15px rgba(109, 235, 253, 0.4);
+      }
+      .asymmetric-gradient {
+        background:
+          radial-gradient(circle at top left, rgba(109, 235, 253, 0.08), transparent 40%),
+          radial-gradient(circle at bottom right, rgba(255, 115, 72, 0.05), transparent 40%);
+      }
     </style>
-</head>
-<body class="font-body selection:bg-primary/30 selection:text-primary">
-<!-- Top Navigation Shell -->
-<nav class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-xl bg-gradient-to-b from-slate-900/20 to-transparent shadow-2xl shadow-cyan-900/10">
-<div class="flex justify-between items-center px-8 py-4 max-w-[1920px] mx-auto">
-<div class="flex items-center gap-12">
-<span class="text-2xl font-black text-cyan-400 italic tracking-tighter font-['Manrope']">STOLIN WEATHER</span>
-<div class="hidden md:flex gap-8">
-<a class="font-['Manrope'] font-bold tracking-tight text-slate-400 hover:text-cyan-200 transition-colors" href="/">Landing</a>
-<a class="font-['Manrope'] font-bold tracking-tight text-cyan-400 border-b-2 border-cyan-400 pb-1" href="/marketplace.html">Marketplace</a>
-<a class="font-['Manrope'] font-bold tracking-tight text-slate-400 hover:text-cyan-200 transition-colors" href="/methodology.html">Methodology</a>
-<a class="font-['Manrope'] font-bold tracking-tight text-slate-400 hover:text-cyan-200 transition-colors" href="/watchlist.html">Watchlist</a>
-<a class="font-['Manrope'] font-bold tracking-tight text-slate-400 hover:text-cyan-200 transition-colors" href="/history.html">History</a>
-</div>
-</div>
-<div class="flex items-center gap-6">
-<button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 scale-95 active:scale-90 transition-transform text-slate-400">
-<span class="material-symbols-outlined">notifications</span>
-</button>
-<button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 scale-95 active:scale-90 transition-transform text-cyan-400">
-<span class="material-symbols-outlined">account_circle</span>
-</button>
-</div>
-</div>
-</nav>
-<!-- Hero Section -->
-<main class="relative min-h-screen flex flex-col justify-center overflow-hidden pt-20" id="marketplace-root">
-<div class="absolute inset-0 z-0">
-<img class="w-full h-full object-cover opacity-40 mix-blend-luminosity" data-alt="dramatic cinematic wide shot of dark storm clouds over a deep teal ocean with distant flashes of lightning at twilight" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBrJA0endKdbZVEf0i2kTwsVkijZvIKPueit1kk-SWaBBLeC5ZJ1L4h2WHYIK5EV9iGRum9RBwUQFhwaPHUIc5kTqnxkV12gxIwd6EXSGQtAiexjA9XZU7toBM5eSXwR1NwiAfDASA86MG3Jcvm_k63M4jvOFLO0cH4x9le2Aw8i8t0YGXuJnwGcumr8uPMANuMpsbAzvy_XBSrYauGddfcs2_FJPknj7XnzN_7TFT9LBY3lABu7el9be9ssDfJAf1idwtpnLL5m5o"/>
-<div class="absolute inset-0 hero-gradient"></div>
-<div class="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent"></div>
-</div>
-<div class="relative z-10 px-8 max-w-7xl mx-auto w-full">
-<div class="max-w-3xl">
-<div class="inline-flex items-center gap-2 bg-primary/10 border border-primary/20 px-4 py-2 rounded-full mb-8">
-<span class="material-symbols-outlined text-primary text-sm" style="font-variation-settings: 'FILL' 1;">thunderstorm</span>
-<span class="font-label text-xs uppercase tracking-widest text-primary font-bold">New York: Thunderstorm Cluster Imminent</span>
-</div>
-<h1 class="text-6xl md:text-8xl font-black font-headline tracking-tighter text-on-surface mb-8 leading-[0.9]">
-                    Trade the <span class="text-primary italic">Atmosphere.</span>
-</h1>
-<p class="text-xl text-on-surface-variant font-body mb-12 max-w-xl leading-relaxed">Harness high-precision meteorological intelligence to dominate prediction markets. At Stolin Weather, we turn atmospheric volatility into actionable alpha.</p>
-<div class="flex flex-wrap gap-6">
-<button class="bg-gradient-to-r from-primary to-primary-container text-on-primary font-headline font-bold px-10 py-5 rounded-xl hover:scale-105 active:scale-95 transition-all shadow-xl shadow-primary/20">
-                        Launch Terminal
-                    </button>
-<button class="glass-panel border border-outline-variant/30 text-on-surface font-headline font-bold px-10 py-5 rounded-xl hover:bg-white/5 transition-all">
-                        View Live Markets
-                    </button>
-</div>
-</div>
-</div>
-</main>
-<!-- Live Ticker Section -->
-<div class="relative z-20 -mt-10 mb-20 overflow-hidden">
-<div class="flex whitespace-nowrap gap-8 py-6 glass-panel border-y border-white/5">
-<div class="flex items-center gap-8 animate-marquee">
-<div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
-<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">NYC RAIN &gt; 0.5"</span>
-<span class="font-label text-sm font-bold text-primary">68% PROB.</span>
-<span class="material-symbols-outlined text-primary text-base">trending_up</span>
-</div>
-<div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
-<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">MIAMI HEAT &gt; 95°F</span>
-<span class="font-label text-sm font-bold text-secondary">42% PROB.</span>
-<span class="material-symbols-outlined text-secondary text-base">trending_down</span>
-</div>
-<div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
-<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">HURRICANE ESTHER</span>
-<span class="font-label text-sm font-bold text-primary">12% LANDFALL</span>
-<span class="material-symbols-outlined text-primary text-base">pulse_alert</span>
-</div>
-<div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
-<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">SF FOG INDEX</span>
-<span class="font-label text-sm font-bold text-primary">89% CONSENSUS</span>
-<span class="material-symbols-outlined text-primary text-base">equalizer</span>
-</div>
-<!-- Duplicate for seamless loop -->
-<div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
-<span class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">NYC RAIN &gt; 0.5"</span>
-<span class="font-label text-sm font-bold text-primary">68% PROB.</span>
-</div>
-</div>
-</div>
-</div>
-<!-- Why Stolin? Bento Grid -->
-<section class="px-8 max-w-7xl mx-auto mb-32">
-<div class="flex flex-col md:flex-row justify-between items-end mb-16 gap-8">
-<div class="max-w-2xl">
-<h2 class="text-4xl md:text-5xl font-black font-headline tracking-tighter mb-6">Why Stolin?</h2>
-<p class="text-on-surface-variant text-lg leading-relaxed">
-                    We bridge the gap between complex meteorological modeling and financial execution, providing the tools needed to navigate the world's most unpredictable asset class.
-                </p>
-</div>
-<div class="h-px flex-1 bg-gradient-to-r from-white/10 to-transparent mb-4 hidden md:block"></div>
-</div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-<!-- Accuracy Card -->
-<div class="md:col-span-2 group relative overflow-hidden rounded-[2rem] bg-surface-container-low border border-white/5 transition-all hover:bg-surface-container">
-<div class="absolute top-0 right-0 p-8">
-<span class="material-symbols-outlined text-primary text-6xl opacity-20 group-hover:opacity-40 transition-opacity">radar</span>
-</div>
-<div class="p-10 relative z-10 h-full flex flex-col justify-end min-h-[360px]">
-<h3 class="text-3xl font-black font-headline mb-4">Hyper-Local Accuracy</h3>
-<p class="text-on-surface-variant leading-relaxed max-w-md">
-                        Proprietary sensor networks combined with Kalshi market depth offer a resolution of data traditional forecasting giants can't match.
-                    </p>
-<div class="mt-8 flex gap-2">
-<div class="h-1 w-12 bg-primary rounded-full"></div>
-<div class="h-1 w-4 bg-white/10 rounded-full"></div>
-<div class="h-1 w-4 bg-white/10 rounded-full"></div>
-</div>
-</div>
-</div>
-<!-- Speed Card -->
-<div class="group relative overflow-hidden rounded-[2rem] bg-surface-container-high p-10 border border-white/5 transition-all hover:bg-surface-container-highest">
-<span class="material-symbols-outlined text-secondary text-5xl mb-8 block">bolt</span>
-<h3 class="text-2xl font-black font-headline mb-4">Millisecond Latency</h3>
-<p class="text-on-surface-variant text-sm leading-relaxed">
-                    Our direct pipeline to global weather stations ensures you receive updates before the storm breaks, giving you the critical edge in price discovery.
-                </p>
-<div class="mt-12 overflow-hidden rounded-xl bg-black/40 p-4 border border-white/5">
-<div class="flex items-baseline gap-2 mb-2">
-<span class="text-xs font-label text-on-surface-variant">Update Speed</span>
-<span class="text-xl font-bold font-headline text-secondary">0.04s</span>
-</div>
-<div class="flex gap-1 items-end h-8">
-<div class="w-1 bg-secondary/20 h-2"></div>
-<div class="w-1 bg-secondary/40 h-4"></div>
-<div class="w-1 bg-secondary/60 h-6"></div>
-<div class="w-1 bg-secondary/80 h-3"></div>
-<div class="w-1 bg-secondary h-8"></div>
-<div class="w-1 bg-secondary/90 h-5"></div>
-</div>
-</div>
-</div>
-<!-- Market Insight Card -->
-<div class="group relative overflow-hidden rounded-[2rem] bg-surface-container-high p-10 border border-white/5 transition-all hover:bg-surface-container-highest">
-<span class="material-symbols-outlined text-primary text-5xl mb-8 block">analytics</span>
-<h3 class="text-2xl font-black font-headline mb-4">Market Insight</h3>
-<p class="text-on-surface-variant text-sm leading-relaxed">
-                    Deep integration with Kalshi's regulated markets allows for direct execution of complex hedging strategies based on climate probabilities.
-                </p>
-</div>
-<!-- Visual Feature -->
-<div class="md:col-span-2 relative overflow-hidden rounded-[2rem] min-h-[300px]">
-<img class="absolute inset-0 w-full h-full object-cover grayscale opacity-60" data-alt="abstract digital visualization of earth atmosphere with flowing lines of data and heat maps in glowing neon blue and orange" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDvAh5g-fPZifRuOf5hhBGVLTjP9Mc6Lls1FdbeWwCZ6McF8yapzLUJ6D_wFVY1MkfXKPeyXlRw6KYul1qWvdhwaRkop-_Gwx-SWsYkwQfTBzlenRh3JydxNbIAmYriUl_OUAsCyneLQ01P2g7p5N-6dVZ-1DJLTqyDZGQtf76_Xf_sXnqTKKzEuQG5WizDBYaoS5OCxRlWxT4kQm9_K8jSbSl8LXi2Y3drBOvargU2wE9X5HEo4y6Wmn-m5kPRlvoLfXssxFKCzmY"/>
-<div class="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 mix-blend-overlay"></div>
-<div class="absolute inset-0 flex items-center p-10 bg-black/20 backdrop-blur-sm">
-<div class="max-w-sm">
-<h4 class="text-2xl font-black font-headline mb-2">Institutional Grade</h4>
-<p class="text-white/80 text-sm">Used by commodity traders and agricultural hedge funds globally.</p>
-</div>
-</div>
-</div>
-</div>
-</section>
-<!-- Call to Action -->
-<section class="relative px-8 py-32 overflow-hidden bg-surface-container-low">
-<div class="max-w-5xl mx-auto text-center relative z-10">
-<h2 class="text-5xl md:text-7xl font-black font-headline tracking-tighter mb-8">Ready to forecast the future?</h2>
-<p class="text-xl text-on-surface-variant mb-12 max-w-2xl mx-auto">Join 50k+ traders utilizing Stolin Weather to hedge against climate volatility. Sign up for the Stolin Alpha Terminal today.</p>
-<div class="flex flex-col md:flex-row justify-center gap-4">
-<input class="bg-surface-container-lowest border-none rounded-xl px-8 py-5 text-on-surface font-label w-full md:w-96 focus:ring-2 focus:ring-primary transition-all" placeholder="Enter your work email" type="email"/>
-<button class="bg-primary text-on-primary font-headline font-extrabold px-10 py-5 rounded-xl hover:bg-primary-fixed-dim transition-colors">
-                    Access Beta
-                </button>
-</div>
-</div>
-<div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-full h-full opacity-10 pointer-events-none">
-<span class="material-symbols-outlined text-[40rem] text-primary" style="font-variation-settings: 'FILL' 0;">cloud</span>
-</div>
-</section>
-<!-- Footer Shell -->
-<footer class="bg-slate-950 w-full py-12 mt-20 border-t border-white/5">
-<div class="grid grid-cols-1 md:grid-cols-2 gap-8 px-12 max-w-7xl mx-auto">
-<div>
-<span class="font-['Manrope'] font-extrabold text-slate-200 text-xl block mb-4">STOLIN WEATHER</span>
-<p class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 max-w-xs">© 2024 STOLIN WEATHER. DATA-DRIVEN METEOROLOGICAL ALPHA.</p>
-</div>
-<div class="grid grid-cols-2 gap-4">
-<div class="flex flex-col gap-3">
-<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100 transition-opacity" href="/">Landing</a>
-<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100 transition-opacity" href="/methodology.html">Methodology</a>
-</div>
-<div class="flex flex-col gap-3">
-<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100 transition-opacity" href="/watchlist.html">Watchlist</a>
-<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100 transition-opacity" href="/history.html">History</a>
-</div>
-</div>
-</div>
-</footer>
-<script src="/marketplace-page.js" defer></script>
-<style>
-        @keyframes marquee {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
-        }
-        .animate-marquee {
-            display: flex;
-            animation: marquee 30s linear infinite;
-        }
-    </style>
-</body></html>
+  </head>
+  <body class="bg-background text-on-surface font-body selection:bg-primary/30 min-h-screen asymmetric-gradient">
+    <header class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-xl bg-gradient-to-b from-slate-900/20 to-transparent shadow-2xl shadow-cyan-900/10">
+      <nav class="flex justify-between items-center px-8 py-4 max-w-[1920px] mx-auto">
+        <div class="flex items-center gap-12">
+          <div class="text-2xl font-black text-cyan-400 italic tracking-tighter font-headline uppercase">STOLIN WEATHER</div>
+          <div class="hidden md:flex items-center gap-8 font-headline font-bold tracking-tight">
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/">Landing</a>
+            <a class="text-cyan-400 border-b-2 border-cyan-400 pb-1" href="/marketplace.html">Marketplace</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/methodology.html">Methodology</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/watchlist.html">Watchlist</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/history.html">History</a>
+          </div>
+        </div>
+        <div class="flex items-center gap-6">
+          <div class="relative hidden lg:block">
+            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">search</span>
+            <input
+              class="bg-slate-950/50 border-none rounded-xl pl-10 pr-4 py-2 text-sm text-on-surface-variant focus:ring-1 focus:ring-primary w-64"
+              id="marketplace-search"
+              placeholder="Search markets..."
+              type="text"
+            />
+          </div>
+          <div class="flex gap-4">
+            <button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 text-slate-400 scale-95 active:scale-90">
+              <span class="material-symbols-outlined">notifications</span>
+            </button>
+            <button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 text-slate-400 scale-95 active:scale-90">
+              <span class="material-symbols-outlined">account_circle</span>
+            </button>
+          </div>
+        </div>
+      </nav>
+    </header>
+    <main class="pt-28 pb-20 px-8 max-w-[1400px] mx-auto" id="marketplace-root"></main>
+    <footer class="w-full py-12 mt-20 bg-slate-950 border-t border-white/5">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8 px-12 max-w-7xl mx-auto">
+        <div>
+          <div class="font-['Manrope'] font-extrabold text-slate-200 text-xl mb-4 uppercase">STOLIN WEATHER</div>
+          <p class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 leading-loose">
+            © 2024 STOLIN WEATHER. DATA-DRIVEN METEOROLOGICAL ALPHA. ALL PREDICTIONS ARE PROBABILISTIC
+            MODELS AND DO NOT CONSTITUTE FINANCIAL ADVICE.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-x-12 gap-y-4 md:justify-end items-center">
+          <a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/">Landing</a>
+          <a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/methodology.html">Methodology</a>
+          <a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/watchlist.html">Watchlist</a>
+          <a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/history.html">History</a>
+        </div>
+      </div>
+    </footer>
+    <script src="/marketplace-page.js" defer></script>
+  </body>
+</html>
