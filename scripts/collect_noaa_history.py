@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -29,6 +31,7 @@ from load_json_to_postgres import (
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "tracked_markets.json"
+SETTLEMENT_PATH = ROOT / "config" / "kalshi_settlement_sources.json"
 OUTPUT_DIR = ROOT / "output" / "history"
 LATEST_PATH = OUTPUT_DIR / "latest_noaa_history.json"
 SNAPSHOT_DIR = OUTPUT_DIR / "snapshots"
@@ -48,7 +51,42 @@ def require_token() -> str:
 
 def load_markets(config_path: Path) -> list[dict[str, Any]]:
     with config_path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+        markets = json.load(handle)
+    settlement_rows = json.loads(SETTLEMENT_PATH.read_text(encoding="utf-8"))
+    settlement_by_market = {row["market_id"]: row for row in settlement_rows if row.get("market_id")}
+    for market in markets:
+        settlement = settlement_by_market.get(market["market_id"])
+        if settlement:
+            market["settlement"] = settlement
+    return markets
+
+
+def fetch_text(url: str) -> str:
+    delay = 1.0
+
+    for attempt in range(MAX_RETRIES):
+        request = Request(
+            url,
+            headers={
+                "User-Agent": "weather-app/1.0 (local dev)",
+                "Accept": "text/html, text/plain;q=0.9, */*;q=0.1",
+            },
+        )
+        try:
+            with urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+                return response.read().decode("utf-8", errors="replace")
+        except HTTPError as error:
+            if error.code not in (429, 503) or attempt == MAX_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+        except socket.timeout:
+            if attempt == MAX_RETRIES - 1:
+                raise
+            time.sleep(delay)
+            delay *= 2
+
+    raise RuntimeError("Exceeded CLI fetch retry attempts")
 
 
 def fetch_json(token: str, endpoint: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -104,6 +142,111 @@ def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     return 2 * radius * math.asin(math.sqrt(a))
 
 
+def normalize_station_text(value: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
+
+
+def station_priority(station_id: str | None) -> int:
+    if not station_id:
+        return 9
+    raw = station_id.split(":")[-1]
+    if raw.startswith("USW"):
+        return 0
+    if raw.startswith("USC"):
+        return 1
+    if raw.startswith("USR"):
+        return 2
+    if raw.startswith("US1"):
+        return 5
+    return 3
+
+
+def station_name_bonus(station: dict[str, Any], settlement: dict[str, Any] | None) -> int:
+    if not settlement:
+        return 0
+    station_name = normalize_station_text(station.get("name"))
+    target_name = normalize_station_text(settlement.get("settlement_station_name"))
+    if not station_name or not target_name:
+        return 0
+    bonus = 0
+    for token in target_name.split():
+        if len(token) >= 4 and token in station_name:
+            bonus -= 3
+    airport_code_match = re.search(r"\(([A-Z0-9]+)\)", settlement.get("settlement_station_name") or "")
+    if airport_code_match:
+        airport_code = airport_code_match.group(1).lower()
+        if airport_code in station_name:
+            bonus -= 8
+    return bonus
+
+
+def cli_report_observation(text: str) -> tuple[str, float] | None:
+    text_only = html.unescape(re.sub(r"<[^>]+>", " ", text))
+    text_only = re.sub(r"\s+", " ", text_only)
+    date_match = re.search(r"FOR ([A-Z]+ \d{1,2} \d{4})", text_only)
+    if not date_match:
+        return None
+    observation_date = datetime.strptime(date_match.group(1), "%B %d %Y").date().isoformat()
+    max_match = re.search(r"(?:YESTERDAY|TODAY)\s+MAXIMUM\s+(\d+(?:\.\d+)?)", text_only)
+    if not max_match:
+        return None
+    return observation_date, float(max_match.group(1))
+
+
+def collect_cli_history(market: dict[str, Any], pulled_at: str) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    settlement = market.get("settlement") or {}
+    source_url = settlement.get("kalshi_source_url")
+    if not source_url:
+        return None
+    raw_text = fetch_text(source_url)
+    parsed = cli_report_observation(raw_text)
+    if not parsed:
+        return None
+    observation_date, tmax_f = parsed
+    station = {
+        "id": settlement.get("settlement_station_id"),
+        "name": settlement.get("settlement_station_name"),
+        "latitude": settlement.get("settlement_station_latitude"),
+        "longitude": settlement.get("settlement_station_longitude"),
+        "datacoverage": None,
+    }
+    rows = [
+        {
+            "date": observation_date,
+            "value": tmax_f,
+            "source_type": "nws_cli",
+            "source_url": source_url,
+            "raw_text": raw_text,
+        }
+    ]
+    return station, rows
+
+
+def merge_history_rows(
+    station_rows: list[dict[str, Any]],
+    cli_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+
+    for row in station_rows:
+        observed_date = row["date"][:10]
+        merged[observed_date] = {
+            **row,
+            "date": observed_date,
+            "source_type": row.get("source_type", "ncei_ghcnd"),
+        }
+
+    for row in cli_rows:
+        observed_date = row["date"][:10]
+        merged[observed_date] = {
+            **row,
+            "date": observed_date,
+            "source_type": row.get("source_type", "nws_cli"),
+        }
+
+    return [merged[key] for key in sorted(merged)]
+
+
 def station_covers_range(station: dict[str, Any], start_date: date, end_date: date) -> bool:
     min_date = station.get("mindate")
     max_date = station.get("maxdate")
@@ -113,8 +256,9 @@ def station_covers_range(station: dict[str, Any], start_date: date, end_date: da
 
 
 def find_candidate_stations(token: str, market: dict[str, Any], start_date: date, end_date: date) -> list[dict[str, Any]]:
-    lat = float(market["latitude"])
-    lon = float(market["longitude"])
+    settlement = market.get("settlement") or {}
+    lat = float(settlement.get("settlement_station_latitude") or market["latitude"])
+    lon = float(settlement.get("settlement_station_longitude") or market["longitude"])
     extent = f"{lat - 1.0},{lon - 1.0},{lat + 1.0},{lon + 1.0}"
     payload = fetch_json(
         token,
@@ -139,10 +283,19 @@ def find_candidate_stations(token: str, market: dict[str, Any], start_date: date
             continue
         distance = haversine_miles(lat, lon, float(station_lat), float(station_lon))
         range_penalty = 0 if station_covers_range(station, start_date, end_date) else 1
-        ranked.append((range_penalty, distance, -float(station.get("datacoverage", 0)), station))
+        ranked.append(
+            (
+                range_penalty,
+                station_priority(station.get("id")),
+                distance,
+                station_name_bonus(station, settlement),
+                -float(station.get("datacoverage", 0)),
+                station,
+            )
+        )
 
-    ranked.sort(key=lambda item: (item[0], item[1], item[2]))
-    return [item[3] for item in ranked]
+    ranked.sort(key=lambda item: (item[0], item[1], item[2], item[3], item[4]))
+    return [item[5] for item in ranked]
 
 
 def daterange_chunks(start_date: date, end_date: date) -> list[tuple[date, date]]:
@@ -197,6 +350,9 @@ def normalize_history_entry(
                 "tmax_f": float(value),
                 "month": int(observed_date[5:7]),
                 "day_of_year": datetime.strptime(observed_date, "%Y-%m-%d").timetuple().tm_yday,
+                "source_type": row.get("source_type", "ncei_ghcnd"),
+                "source_url": row.get("source_url"),
+                "raw_text": row.get("raw_text"),
             }
         )
 
@@ -217,6 +373,66 @@ def normalize_history_entry(
             "datacoverage": station.get("datacoverage"),
         },
         "observations": normalized_rows,
+    }
+
+
+def supplement_existing_entry_with_cli(
+    market: dict[str, Any],
+    existing_entry: dict[str, Any],
+    cli_station: dict[str, Any] | None,
+    cli_rows: list[dict[str, Any]],
+    pulled_at: str,
+) -> dict[str, Any]:
+    observations_by_date: dict[str, dict[str, Any]] = {}
+
+    for row in existing_entry.get("observations", []):
+        observed_date = row.get("date")
+        if not observed_date:
+            continue
+        observations_by_date[observed_date] = {
+            **row,
+            "source_type": row.get("source_type", existing_entry.get("source_type", "ncei_ghcnd")),
+            "source_url": row.get("source_url", existing_entry.get("source_url")),
+            "raw_text": row.get("raw_text", existing_entry.get("raw_text")),
+        }
+
+    for row in cli_rows:
+        observed_date = row["date"][:10]
+        observations_by_date[observed_date] = {
+            "date": observed_date,
+            "tmax_f": float(row["value"]),
+            "month": int(observed_date[5:7]),
+            "day_of_year": datetime.strptime(observed_date, "%Y-%m-%d").timetuple().tm_yday,
+            "source_type": row.get("source_type", "nws_cli"),
+            "source_url": row.get("source_url"),
+            "raw_text": row.get("raw_text"),
+        }
+
+    station = cli_station or existing_entry.get("station") or {
+        "id": None,
+        "name": None,
+        "latitude": market["latitude"],
+        "longitude": market["longitude"],
+        "datacoverage": None,
+    }
+
+    return {
+        "pulled_at": pulled_at,
+        "market": {
+            "market_id": market["market_id"],
+            "location": market["location"],
+            "latitude": market["latitude"],
+            "longitude": market["longitude"],
+            "kalshi_series": market.get("kalshi_series", []),
+        },
+        "station": {
+            "id": station.get("id"),
+            "name": station.get("name"),
+            "latitude": station.get("latitude"),
+            "longitude": station.get("longitude"),
+            "datacoverage": station.get("datacoverage"),
+        },
+        "observations": [observations_by_date[key] for key in sorted(observations_by_date)],
     }
 
 
@@ -248,8 +464,20 @@ def run_collection(config_path: Path, lookback_years: int, resume: bool) -> tupl
     entries = []
     for market in markets:
         existing_entry = existing_entries.get(market["market_id"])
-        if existing_entry and existing_entry.get("observations"):
-            entries.append(existing_entry)
+
+        cli_station = None
+        cli_rows: list[dict[str, Any]] = []
+        try:
+            cli_result = collect_cli_history(market, pulled_at)
+        except (HTTPError, URLError, RuntimeError, socket.timeout):
+            cli_result = None
+        if cli_result:
+            cli_station, cli_rows = cli_result
+
+        if existing_entry is not None:
+            entries.append(
+                supplement_existing_entry_with_cli(market, existing_entry, cli_station, cli_rows, pulled_at)
+            )
             continue
 
         candidate_stations = find_candidate_stations(token, market, start_date, end_date)
@@ -263,14 +491,17 @@ def run_collection(config_path: Path, lookback_years: int, resume: bool) -> tupl
                 selected_rows = rows
                 break
 
-        if selected_station is None:
+        if selected_station is None and cli_station is not None:
+            selected_station = cli_station
+        elif selected_station is None:
             selected_station = candidate_stations[0]
 
-        entries.append(normalize_history_entry(market, selected_station, selected_rows, pulled_at))
+        merged_rows = merge_history_rows(selected_rows, cli_rows)
+        entries.append(normalize_history_entry(market, selected_station, merged_rows, pulled_at))
         write_outputs(
             {
                 "pulled_at": pulled_at,
-                "source": "noaa-cdo-ghcnd",
+                "source": "noaa-cdo-ghcnd+nws-cli",
                 "lookback_years": lookback_years,
                 "start_date": start_date.isoformat(),
                 "end_date": end_date.isoformat(),
@@ -281,7 +512,7 @@ def run_collection(config_path: Path, lookback_years: int, resume: bool) -> tupl
 
     payload = {
         "pulled_at": pulled_at,
-        "source": "noaa-cdo-ghcnd",
+        "source": "noaa-cdo-ghcnd+nws-cli",
         "lookback_years": lookback_years,
         "start_date": start_date.isoformat(),
         "end_date": end_date.isoformat(),

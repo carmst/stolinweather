@@ -642,12 +642,15 @@ insert into app.daily_observations (
 select
   location->'market'->>'market_id',
   nullif(observation->>'date', '')::date,
-  'ncei_ghcnd',
+  coalesce(nullif(observation->>'source_type', ''), 'ncei_ghcnd'),
   location->'station'->>'id',
   location->'station'->>'name',
   nullif(observation->>'tmax_f', '')::double precision,
-  'https://www.ncei.noaa.gov/cdo-web/webservices/v2',
-  observation
+  coalesce(
+    nullif(observation->>'source_url', ''),
+    'https://www.ncei.noaa.gov/cdo-web/webservices/v2'
+  ),
+  coalesce(observation->'raw_text', observation)
 from payload, jsonb_array_elements(doc->'locations') as location
 cross join jsonb_array_elements(coalesce(location->'observations', '[]'::jsonb)) as observation
 on conflict (market_id, observation_date, source_type) do update set
