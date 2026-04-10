@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Watchlist | STOLIN WEATHER</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "error-dim": "#d7383b",
+                    "primary-fixed": "#6debfd",
+                    "surface-container-low": "#0c1518",
+                    "tertiary": "#ccf9ff",
+                    "error": "#ff716c",
+                    "secondary-fixed": "#ffc4b3",
+                    "surface": "#070f12",
+                    "on-error-container": "#ffa8a3",
+                    "surface-bright": "#222e33",
+                    "tertiary-container": "#93f1fd",
+                    "on-secondary-fixed-variant": "#972900",
+                    "surface-container": "#111b1f",
+                    "on-primary-fixed-variant": "#005f69",
+                    "outline-variant": "#41494d",
+                    "on-surface": "#f0f8fc",
+                    "background": "#070f12",
+                    "inverse-surface": "#f2fbff",
+                    "on-tertiary-fixed": "#00474d",
+                    "on-secondary": "#420d00",
+                    "primary-fixed-dim": "#5dddee",
+                    "surface-variant": "#1c272c",
+                    "on-primary-fixed": "#004148",
+                    "tertiary-fixed-dim": "#85e3ef",
+                    "surface-tint": "#6debfd",
+                    "on-primary": "#00555e",
+                    "on-secondary-fixed": "#651900",
+                    "secondary": "#ff7348",
+                    "inverse-primary": "#006974",
+                    "outline": "#6e777a",
+                    "error-container": "#9f0519",
+                    "surface-container-highest": "#1c272c",
+                    "surface-container-high": "#172125",
+                    "tertiary-dim": "#85e3ef",
+                    "on-background": "#f0f8fc",
+                    "primary": "#6debfd",
+                    "inverse-on-surface": "#4e565a",
+                    "on-primary-container": "#00272c",
+                    "on-tertiary": "#00646d",
+                    "primary-dim": "#5dddee",
+                    "secondary-dim": "#ff7348",
+                    "on-tertiary-container": "#005b63",
+                    "tertiary-fixed": "#93f1fd",
+                    "on-tertiary-fixed-variant": "#00666f",
+                    "secondary-container": "#a12d01",
+                    "on-surface-variant": "#a4acb0",
+                    "surface-container-lowest": "#000000",
+                    "on-error": "#490006",
+                    "primary-container": "#18b1c1",
+                    "on-secondary-container": "#ffe6df",
+                    "secondary-fixed-dim": "#ffb19a",
+                    "surface-dim": "#070f12"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Manrope"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-panel {
+            background: rgba(28, 39, 44, 0.4);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .weather-bleed {
+            background: radial-gradient(circle at 50% -20%, #005f69 0%, #070f12 70%);
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body selection:bg-primary/30 weather-bleed min-h-screen">
+<!-- TopNavBar -->
+<nav class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-xl bg-gradient-to-b from-slate-900/20 to-transparent shadow-2xl shadow-cyan-900/10">
+<div class="flex justify-between items-center px-8 py-4 max-w-[1920px] mx-auto">
+<div class="flex items-center gap-12">
+<span class="text-2xl font-black text-cyan-400 italic tracking-tighter font-['Manrope']">STOLIN WEATHER</span>
+<div class="hidden md:flex items-center gap-8 font-['Manrope'] font-bold tracking-tight">
+<a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/">Landing</a>
+<a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/marketplace.html">Marketplace</a>
+<a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/methodology.html">Methodology</a>
+<a class="text-cyan-400 border-b-2 border-cyan-400 pb-1" href="/watchlist.html">Watchlist</a>
+<a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/history.html">History</a>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 text-slate-400">
+<span class="material-symbols-outlined" data-icon="search">search</span>
+</button>
+<button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 text-slate-400">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<button class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 text-cyan-400">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</div>
+</nav>
+<main class="pt-32 pb-20 px-8 max-w-7xl mx-auto" id="watchlist-root">
+<!-- Hero Section / Title -->
+<header class="mb-12">
+<div class="flex items-end justify-between">
+<div>
+<div class="flex items-center gap-3 mb-2">
+<span class="text-primary-fixed bg-primary/10 px-3 py-1 rounded-full text-xs font-label tracking-widest uppercase">Live Surveillance</span>
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+</div>
+<h1 class="text-5xl font-headline font-extrabold tracking-tight text-on-surface">Watchlist</h1>
+<p class="text-on-surface-variant mt-4 max-w-xl font-body text-lg leading-relaxed">
+                    Tracking high-variance meteorological outcomes with correlated Kalshi liquidity pools.
+                </p>
+</div>
+<div class="hidden lg:block">
+<div class="glass-panel p-6 rounded-xl flex items-center gap-6">
+<div class="text-right">
+<span class="block text-[10px] uppercase tracking-tighter text-outline font-label">Global Confidence</span>
+<span class="text-2xl font-headline font-bold text-primary">88.4%</span>
+</div>
+<div class="h-10 w-[1px] bg-outline-variant"></div>
+<div class="text-right">
+<span class="block text-[10px] uppercase tracking-tighter text-outline font-label">Active Signals</span>
+<span class="text-2xl font-headline font-bold text-secondary">14</span>
+</div>
+</div>
+</div>
+</div>
+</header>
+<!-- Search & Filter Bar (Minimalist) -->
+<div class="mb-8 flex flex-wrap gap-4 items-center justify-between">
+<div class="flex gap-2">
+<button class="bg-surface-container-highest px-6 py-2 rounded-full text-sm font-label font-medium text-primary shadow-lg shadow-primary/5">All Markets</button>
+<button class="hover:bg-surface-container-high px-6 py-2 rounded-full text-sm font-label font-medium text-on-surface-variant transition-colors">Temperature</button>
+<button class="hover:bg-surface-container-high px-6 py-2 rounded-full text-sm font-label font-medium text-on-surface-variant transition-colors">Precipitation</button>
+<button class="hover:bg-surface-container-high px-6 py-2 rounded-full text-sm font-label font-medium text-on-surface-variant transition-colors">Storm Surge</button>
+</div>
+<div class="relative group">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline text-sm" data-icon="filter_list">filter_list</span>
+<select class="bg-transparent border-none focus:ring-0 text-sm font-label text-on-surface-variant pl-10 cursor-pointer">
+<option>Sort by: Confidence</option>
+<option>Sort by: Expiry</option>
+<option>Sort by: Volume</option>
+</select>
+</div>
+</div>
+<!-- Watchlist Table Section -->
+<div class="glass-panel rounded-2xl overflow-hidden shadow-2xl">
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low/50">
+<th class="px-8 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Market Name</th>
+<th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Current Odds</th>
+<th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline text-center">Stolin Prediction</th>
+<th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Market Trend</th>
+<th class="px-8 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5">
+<!-- Row 1 -->
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-8 py-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="thermostat">thermostat</span>
+</div>
+<div>
+<span class="block font-headline font-bold text-on-surface">NYC Temp &gt; 95°F (Aug 15)</span>
+<span class="text-xs text-outline font-label">Contract ID: NYC-TMP-24</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col">
+<span class="text-lg font-headline font-extrabold text-on-surface">64¢</span>
+<span class="text-[10px] font-label text-outline uppercase tracking-tighter">Implied Prob: 64%</span>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col items-center">
+<span class="text-xl font-headline font-black text-secondary">82%</span>
+<div class="w-24 h-1 bg-surface-container-highest rounded-full mt-2 overflow-hidden">
+<div class="h-full bg-secondary w-[82%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span class="text-xs font-label font-semibold">+12.4% (24h)</span>
+</div>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary-container px-4 py-2 rounded-xl text-xs font-label font-bold transition-all duration-300 transform active:scale-95">
+                                View on Kalshi
+                            </button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-8 py-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined" data-icon="rainy">rainy</span>
+</div>
+<div>
+<span class="block font-headline font-bold text-on-surface">Miami Rainfall &gt; 2in (Weekly)</span>
+<span class="text-xs text-outline font-label">Contract ID: MIA-PCP-08</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col">
+<span class="text-lg font-headline font-extrabold text-on-surface">18¢</span>
+<span class="text-[10px] font-label text-outline uppercase tracking-tighter">Implied Prob: 18%</span>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col items-center">
+<span class="text-xl font-headline font-black text-primary">12%</span>
+<div class="w-24 h-1 bg-surface-container-highest rounded-full mt-2 overflow-hidden">
+<div class="h-full bg-primary w-[12%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex items-center gap-2 text-error">
+<span class="material-symbols-outlined text-sm" data-icon="trending_down">trending_down</span>
+<span class="text-xs font-label font-semibold">-4.1% (24h)</span>
+</div>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary-container px-4 py-2 rounded-xl text-xs font-label font-bold transition-all duration-300 transform active:scale-95">
+                                View on Kalshi
+                            </button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-8 py-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined" data-icon="cyclone">cyclone</span>
+</div>
+<div>
+<span class="block font-headline font-bold text-on-surface">Category 3 Storm Landfall FL</span>
+<span class="text-xs text-outline font-label">Contract ID: ATL-STRM-01</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col">
+<span class="text-lg font-headline font-extrabold text-on-surface">42¢</span>
+<span class="text-[10px] font-label text-outline uppercase tracking-tighter">Implied Prob: 42%</span>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col items-center">
+<span class="text-xl font-headline font-black text-secondary">55%</span>
+<div class="w-24 h-1 bg-surface-container-highest rounded-full mt-2 overflow-hidden">
+<div class="h-full bg-secondary w-[55%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex items-center gap-2 text-primary">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span>
+<span class="text-xs font-label font-semibold">+22.8% (24h)</span>
+</div>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary-container px-4 py-2 rounded-xl text-xs font-label font-bold transition-all duration-300 transform active:scale-95">
+                                View on Kalshi
+                            </button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="group hover:bg-white/5 transition-colors">
+<td class="px-8 py-6">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center text-white/50">
+<span class="material-symbols-outlined" data-icon="air">air</span>
+</div>
+<div>
+<span class="block font-headline font-bold text-on-surface">Chicago Wind Speed &gt; 30mph</span>
+<span class="text-xs text-outline font-label">Contract ID: CHI-WND-12</span>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col">
+<span class="text-lg font-headline font-extrabold text-on-surface">09¢</span>
+<span class="text-[10px] font-label text-outline uppercase tracking-tighter">Implied Prob: 9%</span>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex flex-col items-center">
+<span class="text-xl font-headline font-black text-on-surface-variant">10%</span>
+<div class="w-24 h-1 bg-surface-container-highest rounded-full mt-2 overflow-hidden">
+<div class="h-full bg-outline-variant w-[10%]"></div>
+</div>
+</div>
+</td>
+<td class="px-6 py-6">
+<div class="flex items-center gap-2 text-outline">
+<span class="material-symbols-outlined text-sm" data-icon="horizontal_rule">horizontal_rule</span>
+<span class="text-xs font-label font-semibold">Stable</span>
+</div>
+</td>
+<td class="px-8 py-6 text-right">
+<button class="bg-primary/10 hover:bg-primary text-primary hover:text-on-primary-container px-4 py-2 rounded-xl text-xs font-label font-bold transition-all duration-300 transform active:scale-95">
+                                View on Kalshi
+                            </button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-8 bg-surface-container-low/30 flex justify-between items-center border-t border-white/5">
+<span class="text-xs font-label text-outline">Showing 4 of 14 tracked markets</span>
+<div class="flex gap-4">
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Alpha Insights / Bento Cards -->
+<div class="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="glass-panel p-8 rounded-3xl col-span-1 md:col-span-2 relative overflow-hidden group">
+<div class="relative z-10">
+<h3 class="text-2xl font-headline font-bold mb-4">Correlation Opportunity</h3>
+<p class="text-on-surface-variant font-body mb-6 leading-relaxed">
+                    High divergence detected in Miami Rainfall markets. Stolin prediction models suggest a 35% higher probability than current market implied odds of 18¢. This represents a significant alpha opportunity for hedging local weather risk.
+                </p>
+<button class="flex items-center gap-2 text-secondary font-label font-bold hover:gap-4 transition-all">
+                    Deep Dive Prediction <span class="material-symbols-outlined" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+<div class="absolute -right-20 -bottom-20 w-80 h-80 bg-secondary/10 rounded-full blur-[80px] group-hover:bg-secondary/20 transition-all"></div>
+</div>
+<div class="bg-surface-container-high p-8 rounded-3xl relative overflow-hidden flex flex-col justify-between">
+<div>
+<span class="material-symbols-outlined text-primary text-4xl mb-4" data-icon="electric_bolt" style="font-variation-settings: 'FILL' 1;">electric_bolt</span>
+<h4 class="text-xl font-headline font-bold">Signal Alert</h4>
+</div>
+<p class="text-on-surface-variant text-sm font-label mt-4">
+                A sudden barometric shift in the Atlantic is creating new volatility in storm duration contracts.
+            </p>
+<div class="mt-6 pt-6 border-t border-white/5">
+<div class="flex justify-between items-center">
+<span class="text-xs font-label text-outline uppercase tracking-widest">Urgency</span>
+<span class="text-xs font-bold text-secondary">CRITICAL</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+<!-- Footer -->
+<footer class="bg-slate-950 w-full py-12 mt-20 border-t border-white/5">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8 px-12 max-w-7xl mx-auto items-center">
+<div>
+<span class="font-['Manrope'] font-extrabold text-slate-200 text-lg">STOLIN WEATHER</span>
+<p class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 mt-2">© 2024 STOLIN WEATHER. DATA-DRIVEN METEOROLOGICAL ALPHA.</p>
+</div>
+<div class="flex flex-wrap gap-8 md:justify-end">
+<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/">Landing</a>
+<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/marketplace.html">Marketplace</a>
+<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/methodology.html">Methodology</a>
+<a class="font-['Inter'] text-xs uppercase tracking-widest text-slate-500 hover:text-orange-400 transition-colors opacity-80 hover:opacity-100" href="/history.html">History</a>
+</div>
+</div>
+</footer>
+<!-- FAB -->
+<button class="fixed bottom-8 right-8 bg-gradient-to-br from-primary to-primary-container text-on-primary-container w-14 h-14 rounded-2xl flex items-center justify-center shadow-2xl shadow-primary/20 transform hover:scale-110 active:scale-95 transition-all z-40 group">
+<span class="material-symbols-outlined" data-icon="add" style="font-variation-settings: 'wght' 600;">add</span>
+<span class="absolute right-16 bg-surface-container-highest px-4 py-2 rounded-xl text-xs font-label font-bold text-on-surface opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl">Watch New Market</span>
+</button>
+<script src="/watchlist-page.js" defer></script>
+</body></html>

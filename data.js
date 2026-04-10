@@ -7,6 +7,7 @@ const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_
 const noaaHistoryLatestPath = path.join(__dirname, "output", "history", "latest_noaa_history.json");
 const preliminaryHighsLatestPath = path.join(__dirname, "output", "preliminary", "latest_preliminary_daily_highs.json");
 const trackedMarketsPath = path.join(__dirname, "config", "tracked_markets.json");
+const manualWatchlistPath = path.join(__dirname, "config", "watchlist.json");
 const weatherSnapshotsDir = path.join(__dirname, "output", "weather", "snapshots");
 const modelSnapshotsDir = path.join(__dirname, "output", "models", "snapshots");
 const HISTORY_CHECKPOINT_HOUR_LOCAL = 8;
@@ -542,6 +543,15 @@ function loadTrackedMarkets() {
     return JSON.parse(raw);
   } catch (_error) {
     return [];
+  }
+}
+
+function loadManualWatchlist() {
+  try {
+    const raw = fs.readFileSync(manualWatchlistPath, "utf8");
+    return JSON.parse(raw);
+  } catch (_error) {
+    return { locations: [], tickers: [] };
   }
 }
 
@@ -1594,6 +1604,9 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
   const setup = classifySetup(expectedValue, confidenceBand.label, contractCost);
 
   return {
+    ticker: market.ticker || null,
+    eventTicker: market.event_ticker || null,
+    seriesTicker: market.series_ticker || null,
     contract: cleanKalshiContractLabel(market),
     contractSubtitle: formatEventDateLabel(eventDate),
     location: market.cityLabel || extractCityLabel(market),
@@ -2120,6 +2133,35 @@ async function buildDashboard() {
   };
 }
 
+async function buildWatchlistView() {
+  const dashboard = await buildDashboard();
+  const watchlist = loadManualWatchlist();
+  const locationSet = new Set((watchlist.locations || []).map((value) => String(value).toLowerCase()));
+  const tickerSet = new Set((watchlist.tickers || []).map((value) => String(value).toUpperCase()));
+  const allContracts = dashboard.contractViews?.allContracts || dashboard.contracts || [];
+  const curated = allContracts.filter((contract) => {
+    const location = String(contract.location || "").toLowerCase();
+    const ticker = String(contract.ticker || contract.inspectUrl || "").toUpperCase();
+    return locationSet.has(location) || tickerSet.has(ticker);
+  });
+
+  return {
+    updatedAt: dashboard.updatedAt,
+    dataBackend: dashboard.dataBackend,
+    dataBackendReason: dashboard.dataBackendReason,
+    watchlist,
+    rows: curated,
+    stats: {
+      total: curated.length,
+      activeSignals: curated.filter((row) => row.setupLabel === "BEST" || row.setupLabel === "PLAYABLE").length,
+      avgConfidence:
+        curated.length > 0
+          ? Math.round((curated.reduce((sum, row) => sum + (row.confidence || 0), 0) / curated.length) * 100)
+          : 0,
+    },
+  };
+}
+
 async function buildHistoryView(dayCount = 5) {
   const liveHistory = await queryHistoryPayloadFromDb(dayCount);
   const payload = liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0
@@ -2136,4 +2178,5 @@ async function buildHistoryView(dayCount = 5) {
 module.exports = {
   buildDashboard,
   buildHistoryView,
+  buildWatchlistView,
 };

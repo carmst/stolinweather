@@ -50,7 +50,18 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
-  const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
+  if (url.pathname === "/api/watchlist") {
+    const { buildWatchlistView } = require("./data");
+    sendJson(response, 200, await buildWatchlistView());
+    return;
+  }
+
+  let requestedPath = url.pathname;
+  if (requestedPath === "/") {
+    requestedPath = "/landing.html";
+  } else if (requestedPath === "/history.html") {
+    requestedPath = "/new_history.html";
+  }
   const normalizedPath = path.normalize(requestedPath).replace(/^(\.\.[/\\])+/, "");
   const filePath = path.join(root, normalizedPath);
 

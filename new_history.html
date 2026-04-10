@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>History | STOLIN WEATHER</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-low": "#0c1518",
+                    "error-container": "#9f0519",
+                    "outline-variant": "#41494d",
+                    "on-secondary-fixed": "#651900",
+                    "primary-dim": "#5dddee",
+                    "on-tertiary-container": "#005b63",
+                    "tertiary-dim": "#85e3ef",
+                    "primary-container": "#18b1c1",
+                    "on-tertiary-fixed": "#00474d",
+                    "surface": "#070f12",
+                    "primary-fixed-dim": "#5dddee",
+                    "background": "#070f12",
+                    "secondary-fixed-dim": "#ffb19a",
+                    "on-primary-fixed": "#004148",
+                    "inverse-primary": "#006974",
+                    "on-primary": "#00555e",
+                    "on-surface-variant": "#a4acb0",
+                    "error-dim": "#d7383b",
+                    "secondary-dim": "#ff7348",
+                    "inverse-on-surface": "#4e565a",
+                    "on-primary-fixed-variant": "#005f69",
+                    "outline": "#6e777a",
+                    "tertiary-container": "#93f1fd",
+                    "on-background": "#f0f8fc",
+                    "error": "#ff716c",
+                    "on-primary-container": "#00272c",
+                    "on-secondary-container": "#ffe6df",
+                    "on-tertiary-fixed-variant": "#00666f",
+                    "surface-bright": "#222e33",
+                    "primary-fixed": "#6debfd",
+                    "surface-dim": "#070f12",
+                    "on-secondary": "#420d00",
+                    "on-secondary-fixed-variant": "#972900",
+                    "surface-tint": "#6debfd",
+                    "secondary-container": "#a12d01",
+                    "tertiary-fixed": "#93f1fd",
+                    "surface-variant": "#1c272c",
+                    "surface-container-lowest": "#000000",
+                    "on-error": "#490006",
+                    "surface-container": "#111b1f",
+                    "on-tertiary": "#00646d",
+                    "on-error-container": "#ffa8a3",
+                    "inverse-surface": "#f2fbff",
+                    "surface-container-high": "#172125",
+                    "secondary": "#ff7348",
+                    "primary": "#6debfd",
+                    "on-surface": "#f0f8fc",
+                    "tertiary": "#ccf9ff",
+                    "surface-container-highest": "#1c272c",
+                    "tertiary-fixed-dim": "#85e3ef",
+                    "secondary-fixed": "#ffc4b3"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "fontFamily": {
+                    "headline": ["Manrope"],
+                    "body": ["Manrope"],
+                    "label": ["Inter"]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-panel {
+            background: rgba(28, 39, 44, 0.4);
+            backdrop-filter: blur(24px);
+        }
+        .text-glow {
+            text-shadow: 0 0 20px rgba(109, 235, 253, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body selection:bg-primary/30 selection:text-primary">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 bg-[#070f12]/80 backdrop-blur-xl shadow-2xl shadow-[#070f12]/50">
+<nav class="flex justify-between items-center px-8 h-20 w-full">
+<div class="text-2xl font-black tracking-tighter text-[#6debfd]">Stolin Weather</div>
+<div class="hidden md:flex items-center gap-8">
+<a class="text-slate-400 font-medium hover:text-[#6debfd] transition-colors duration-300" href="/">Landing</a>
+<a class="text-slate-400 font-medium hover:text-[#6debfd] transition-colors duration-300" href="/marketplace.html">Marketplace</a>
+<a class="text-slate-400 font-medium hover:text-[#6debfd] transition-colors duration-300" href="/methodology.html">Methodology</a>
+<a class="text-slate-400 font-medium hover:text-[#6debfd] transition-colors duration-300" href="/watchlist.html">Watchlist</a>
+<a class="text-[#6debfd] border-b-2 border-[#6debfd] pb-1 font-['Manrope'] font-bold tracking-tight" href="/history.html">History</a>
+</div>
+<div class="flex items-center gap-6">
+<button class="active:scale-95 transition-transform text-[#6debfd]">
+<span class="material-symbols-outlined">account_balance_wallet</span>
+</button>
+<button class="active:scale-95 transition-transform text-[#6debfd]">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<div class="h-10 w-10 rounded-full overflow-hidden border border-primary/20">
+<img alt="User profile" data-alt="Close-up portrait of a professional trader in a dark studio setting with soft cyan ambient rim lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuXiXdbfDmV1BnUcoy4ZvBx2vzsDpbd05Cyb81cQ-ijttmmXY9-qZrqDaMzAWKGWWTmaCSuVoPoGpsNlQicSQluszGDD9peZBiEb6xGQAr_-yxLM2bvmwGtEzT7PZJSX6yWeJAbpcCdWvGGYU_2BJ-h3YC4YupR5GDDHSeFWyrbyal13k6eb-o-MJYvVe6q1FsHKp-CNhknG6fb3o7nuBLK5jBETOHV3KoVWO3Q1EjVjUZEmz2gKIakiIRVn-JKkW-3RAsrZKT6NQ"/>
+</div>
+</div>
+</nav>
+</header>
+<main class="pt-28 pb-20 px-8 max-w-7xl mx-auto" id="history-root">
+<!-- Hero Section: Performance Stats -->
+<section class="relative mb-16 rounded-3xl overflow-hidden min-h-[400px] flex flex-col justify-end p-12">
+<div class="absolute inset-0 z-0">
+<img class="w-full h-full object-cover opacity-40" data-alt="Dramatic storm clouds at twilight with distant lightning flashes, deep teal and navy color palette, cinematic atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-8wGxAeQ7C_v-Q9WQMYZLAWSwbne7DMcMi6WsqwZnOYzUk3CqiHqTy793l1oMdwmuJGjdVr3z65i3A1S7zy-_6fNXvowvdSrouqNHIfC2Lnzyt75QgRUWghQi5rAW7p6IqNDDuxg5jmn7AAS_27edIZtWICaAak1iKEQyvrn8MrIAK-1dN_bK2QmiYVX6-uj6Q9Tk9WmuHOKvWFDiGTnfLiFX1bh9BdNltBYPBaZALs0NdUXAiMa4176_Cz9HuFkLdMY69iu-ZNw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent"></div>
+</div>
+<div class="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-8">
+<div class="glass-panel p-8 rounded-2xl border border-white/5">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-primary">analytics</span>
+<span class="font-label text-xs uppercase tracking-widest text-slate-400">Total Forecasts</span>
+</div>
+<div class="text-5xl font-black font-headline text-on-surface text-glow">12,842</div>
+<div class="mt-2 text-primary text-sm font-label">+14% vs last quarter</div>
+</div>
+<div class="glass-panel p-8 rounded-2xl border border-white/5">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-secondary">verified</span>
+<span class="font-label text-xs uppercase tracking-widest text-slate-400">Win Accuracy</span>
+</div>
+<div class="text-5xl font-black font-headline text-on-surface text-glow">84.2%</div>
+<div class="mt-2 text-secondary text-sm font-label">Top 0.1% Market Lead</div>
+</div>
+<div class="glass-panel p-8 rounded-2xl border border-white/5">
+<div class="flex items-center gap-3 mb-2">
+<span class="material-symbols-outlined text-primary">trending_up</span>
+<span class="font-label text-xs uppercase tracking-widest text-slate-400">Average Alpha</span>
+</div>
+<div class="text-5xl font-black font-headline text-on-surface text-glow">12.4%</div>
+<div class="mt-2 text-primary text-sm font-label">Beat Market Consensus consistently</div>
+</div>
+</div>
+</section>
+<!-- Filters & Accuracy Chart Section -->
+<section class="grid grid-cols-1 lg:grid-cols-12 gap-8 mb-16">
+<!-- Filters Sidebar -->
+<div class="lg:col-span-3 space-y-6">
+<div class="surface-container-high p-6 rounded-2xl">
+<h3 class="font-headline font-bold text-xl mb-6">Refine Data</h3>
+<div class="space-y-4">
+<div>
+<label class="block font-label text-xs text-slate-500 uppercase tracking-tighter mb-2">Weather Type</label>
+<div class="space-y-2">
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="rounded bg-surface border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-sm group-hover:text-primary transition-colors">Temperature</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input checked="" class="rounded bg-surface border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-sm group-hover:text-primary transition-colors">Precipitation</span>
+</label>
+<label class="flex items-center gap-3 cursor-pointer group">
+<input class="rounded bg-surface border-outline-variant text-primary focus:ring-primary" type="checkbox"/>
+<span class="text-sm group-hover:text-primary transition-colors">Wind Velocity</span>
+</label>
+</div>
+</div>
+<div>
+<label class="block font-label text-xs text-slate-500 uppercase tracking-tighter mb-2">Date Range</label>
+<select class="w-full bg-surface border-none rounded-xl text-sm p-3 focus:ring-2 focus:ring-primary/40 appearance-none">
+<option>Last 365 Days</option>
+<option>Last 90 Days</option>
+<option>Historical Max</option>
+</select>
+</div>
+<button class="w-full py-4 bg-gradient-to-r from-primary to-primary-container text-on-primary font-bold rounded-xl active:scale-95 transition-all mt-4">
+                        Apply Filters
+                    </button>
+</div>
+</div>
+</div>
+<!-- Accuracy Chart Area -->
+<div class="lg:col-span-9 surface-container p-8 rounded-2xl relative overflow-hidden">
+<div class="flex justify-between items-start mb-8">
+<div>
+<h3 class="font-headline font-bold text-2xl">Model Accuracy Over Time</h3>
+<p class="text-slate-400 text-sm">Stolin Engine vs Market Consensus (Kalshi Index)</p>
+</div>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-primary"></span>
+<span class="text-xs font-label">Stolin Engine</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-3 h-3 rounded-full bg-slate-600"></span>
+<span class="text-xs font-label">Market Consensus</span>
+</div>
+</div>
+</div>
+<!-- Simulated Chart Content -->
+<div class="h-64 flex items-end gap-1 relative pt-10">
+<!-- Grid Lines -->
+<div class="absolute inset-0 border-b border-white/5 flex flex-col justify-between py-2">
+<div class="border-t border-white/5 w-full"></div>
+<div class="border-t border-white/5 w-full"></div>
+<div class="border-t border-white/5 w-full"></div>
+</div>
+<!-- SVG Chart Overlay for line effect -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none" preserveaspectratio="none">
+<path d="M0,180 Q100,120 200,150 T400,80 T600,110 T800,40 T1000,60" fill="none" stroke="#6debfd" stroke-linecap="round" stroke-width="4"></path>
+<path d="M0,190 Q100,160 200,170 T400,140 T600,150 T800,120 T1000,140" fill="none" stroke="#41494d" stroke-dasharray="4 4" stroke-width="2"></path>
+</svg>
+<!-- Interactive Data Points (Visible on hover) -->
+<div class="flex-1 group h-full flex flex-col justify-end items-center relative">
+<div class="opacity-0 group-hover:opacity-100 absolute bottom-full mb-4 glass-panel px-3 py-1 rounded text-[10px] whitespace-nowrap z-20">
+                        92.4% Accuracy
+                    </div>
+</div>
+<div class="flex-1 group h-full"></div>
+<div class="flex-1 group h-full"></div>
+<div class="flex-1 group h-full"></div>
+<div class="flex-1 group h-full"></div>
+</div>
+<div class="flex justify-between mt-4 font-label text-[10px] text-slate-500 uppercase tracking-widest">
+<span>Jan</span><span>Mar</span><span>May</span><span>Jul</span><span>Sep</span><span>Nov</span>
+</div>
+</div>
+</section>
+<!-- Historical Markets Section -->
+<section class="mb-16">
+<div class="flex justify-between items-end mb-8">
+<div>
+<h2 class="font-headline font-extrabold text-3xl tracking-tight">Past Market Settlements</h2>
+<p class="text-slate-400">Verifiable historical performance across global weather events.</p>
+</div>
+<button class="text-primary font-bold hover:underline flex items-center gap-2">
+                View Full Archive <span class="material-symbols-outlined">arrow_right_alt</span>
+</button>
+</div>
+<!-- Bento/Tile Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Market Card 1 -->
+<div class="surface-container-high rounded-2xl p-6 transition-all hover:scale-[1.02] hover:surface-container-highest cursor-pointer group">
+<div class="flex justify-between items-start mb-6">
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">thermostat</span>
+</div>
+<span class="font-label text-[10px] text-slate-500 px-2 py-1 border border-outline-variant rounded">CLOSED JUN 24</span>
+</div>
+<h4 class="font-headline font-bold text-lg leading-tight mb-2">NYC Temp &gt; 95°F</h4>
+<p class="text-slate-400 text-sm mb-4">Central Park Observatory</p>
+<div class="space-y-3">
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Stolin Prediction</span>
+<span class="text-primary font-bold">88% Chance</span>
+</div>
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Market Consensus</span>
+<span class="text-on-surface">62% Chance</span>
+</div>
+<div class="pt-4 border-t border-white/5 flex items-center gap-2">
+<span class="material-symbols-outlined text-green-400 text-sm">check_circle</span>
+<span class="text-xs font-bold text-green-400">OUTCOME: YES (96.4°F)</span>
+</div>
+</div>
+</div>
+<!-- Market Card 2 -->
+<div class="surface-container-high rounded-2xl p-6 transition-all hover:scale-[1.02] hover:surface-container-highest cursor-pointer group">
+<div class="flex justify-between items-start mb-6">
+<div class="bg-secondary/10 p-2 rounded-lg text-secondary">
+<span class="material-symbols-outlined">rainy</span>
+</div>
+<span class="font-label text-[10px] text-slate-500 px-2 py-1 border border-outline-variant rounded">CLOSED JUL 12</span>
+</div>
+<h4 class="font-headline font-bold text-lg leading-tight mb-2">Miami Rainfall &gt; 2in</h4>
+<p class="text-slate-400 text-sm mb-4">Biscayne Bay Monitoring</p>
+<div class="space-y-3">
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Stolin Prediction</span>
+<span class="text-primary font-bold">12% Chance</span>
+</div>
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Market Consensus</span>
+<span class="text-on-surface">34% Chance</span>
+</div>
+<div class="pt-4 border-t border-white/5 flex items-center gap-2">
+<span class="material-symbols-outlined text-green-400 text-sm">check_circle</span>
+<span class="text-xs font-bold text-green-400">OUTCOME: NO (0.4in)</span>
+</div>
+</div>
+</div>
+<!-- Market Card 3 -->
+<div class="surface-container-high rounded-2xl p-6 transition-all hover:scale-[1.02] hover:surface-container-highest cursor-pointer group">
+<div class="flex justify-between items-start mb-6">
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">air</span>
+</div>
+<span class="font-label text-[10px] text-slate-500 px-2 py-1 border border-outline-variant rounded">CLOSED AUG 05</span>
+</div>
+<h4 class="font-headline font-bold text-lg leading-tight mb-2">Chicago Winds &gt; 40mph</h4>
+<p class="text-slate-400 text-sm mb-4">O'Hare International</p>
+<div class="space-y-3">
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Stolin Prediction</span>
+<span class="text-primary font-bold">54% Chance</span>
+</div>
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Market Consensus</span>
+<span class="text-on-surface">51% Chance</span>
+</div>
+<div class="pt-4 border-t border-white/5 flex items-center gap-2">
+<span class="material-symbols-outlined text-green-400 text-sm">check_circle</span>
+<span class="text-xs font-bold text-green-400">OUTCOME: YES (42.1mph)</span>
+</div>
+</div>
+</div>
+<!-- Market Card 4 -->
+<div class="surface-container-high rounded-2xl p-6 transition-all hover:scale-[1.02] hover:surface-container-highest cursor-pointer group">
+<div class="flex justify-between items-start mb-6">
+<div class="bg-primary/10 p-2 rounded-lg text-primary">
+<span class="material-symbols-outlined">sunny</span>
+</div>
+<span class="font-label text-[10px] text-slate-500 px-2 py-1 border border-outline-variant rounded">CLOSED AUG 15</span>
+</div>
+<h4 class="font-headline font-bold text-lg leading-tight mb-2">Phoenix Heat &gt; 115°F</h4>
+<p class="text-slate-400 text-sm mb-4">Sky Harbor Station</p>
+<div class="space-y-3">
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Stolin Prediction</span>
+<span class="text-primary font-bold">94% Chance</span>
+</div>
+<div class="flex justify-between text-xs font-label">
+<span class="text-slate-500">Market Consensus</span>
+<span class="text-on-surface">78% Chance</span>
+</div>
+<div class="pt-4 border-t border-white/5 flex items-center gap-2">
+<span class="material-symbols-outlined text-green-400 text-sm">check_circle</span>
+<span class="text-xs font-bold text-green-400">OUTCOME: YES (118°F)</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA Section -->
+<section class="glass-panel rounded-3xl p-12 text-center relative overflow-hidden">
+<div class="absolute inset-0 opacity-10">
+<img class="w-full h-full object-cover" data-alt="Digital representation of Earth with glowing data connections and atmospheric patterns in deep blue and cyan light." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKrZj24G9QxnoND4Oc9gJEWfk37_0YA4_iQFKU9EY8wuGxJat-w7DWSat1LG6eJrh4JaTQomDO-oCvOwbC927-p9e1s1X7EbTZLH7_qQvnzLBJTt7rWMvFx3t8idzy41PBBm4a4zDuF8JJOYdnzeHZrxqXuFQmU1Rrk12BwWshaZ8QzvfiAMWvipWHdI97nUM11TSzYilDPrGChpgzdOvsH7Vi7w2OJIkevKsrgMcBRNjCOFrcl_MeJGTreXvnQk2WvBT4kZTVzyU"/>
+</div>
+<div class="relative z-10">
+<h2 class="text-3xl md:text-5xl font-black font-headline mb-4">Ready to Forecast with Alpha?</h2>
+<p class="text-slate-400 max-w-2xl mx-auto mb-8 font-label">Harness the same model that achieved 84% accuracy last year. Open your first weather derivatives position today.</p>
+<div class="flex flex-col md:flex-row gap-4 justify-center">
+<button class="px-8 py-4 bg-primary text-on-primary font-bold rounded-xl active:scale-95 transition-all">Start Trading</button>
+<button class="px-8 py-4 bg-surface-bright/50 backdrop-blur-md text-on-surface font-bold rounded-xl active:scale-95 transition-all">View API Docs</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full py-12 mt-auto bg-[#000000] border-t border-[#222e33]/30">
+<div class="max-w-7xl mx-auto px-8 flex flex-col md:flex-row justify-between items-center gap-6">
+<div class="text-[#6debfd] font-bold">Stolin Weather</div>
+<div class="flex flex-wrap justify-center gap-8 text-slate-500 font-['Inter'] text-sm tracking-wide">
+<a class="hover:text-[#ff7348] transition-colors duration-200 cursor-pointer" href="/">Landing</a>
+<a class="hover:text-[#ff7348] transition-colors duration-200 cursor-pointer" href="/marketplace.html">Marketplace</a>
+<a class="hover:text-[#ff7348] transition-colors duration-200 cursor-pointer" href="/methodology.html">Methodology</a>
+<a class="hover:text-[#ff7348] transition-colors duration-200 cursor-pointer" href="/watchlist.html">Watchlist</a>
+</div>
+<div class="text-slate-600 text-xs text-center md:text-right">© 2024 Stolin Weather. Powered by Kalshi Integration. Data-driven weather derivatives.</div>
+</div>
+</footer>
+<script src="/history-page.js" defer></script>
+</body></html>
