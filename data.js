@@ -934,14 +934,18 @@ provider_rollups as (
 ),
 model_rollups as (
   select
-    km.market_id,
+    coalesce(max(sms.market_id), max(sms.weather_market_id), ke.market_id) as market_id,
     sdr.forecast_date,
     max(sdr.last_adjusted_forecast_max_f) as model_high_f
   from app.scored_market_daily_rollups sdr
   join app.kalshi_markets km on km.ticker = sdr.ticker
+  join app.kalshi_events ke on ke.event_ticker = km.event_ticker
+  left join app.scored_market_snapshots sms
+    on sms.ticker = sdr.ticker
+   and sms.pulled_at = sdr.last_pulled_at
   join recent_dates rd on rd.summary_date = sdr.forecast_date
   where sdr.forecast_date is not null
-  group by km.market_id, sdr.forecast_date
+  group by ke.market_id, sdr.forecast_date
 ),
 base_rows as (
   select market_id, location, summary_date from actuals_official
