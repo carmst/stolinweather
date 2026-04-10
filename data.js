@@ -12,6 +12,22 @@ const databaseUrl = process.env.DATABASE_URL;
 let databasePool = null;
 let lastDbDebugReason = null;
 
+function getDatabaseConnectionString() {
+  if (!databaseUrl) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(databaseUrl);
+    if (parsed.searchParams.get("sslmode") === "require") {
+      parsed.searchParams.set("sslmode", "no-verify");
+    }
+    return parsed.toString();
+  } catch (_error) {
+    return databaseUrl;
+  }
+}
+
 function getDatabasePool() {
   if (!databaseUrl) {
     return null;
@@ -20,9 +36,10 @@ function getDatabasePool() {
   if (!databasePool) {
     const requiresSsl = /sslmode=require/i.test(databaseUrl) || databaseUrl.includes("supabase.com");
     databasePool = new Pool({
-      connectionString: databaseUrl,
-      ssl: requiresSsl ? { rejectUnauthorized: false } : undefined,
+      connectionString: getDatabaseConnectionString(),
+      ssl: requiresSsl ? { require: true, rejectUnauthorized: false } : undefined,
       max: 3,
+      allowExitOnIdle: true,
     });
   }
 
@@ -879,61 +896,72 @@ async function queryHistoryPayloadFromDb(dayCount = 5) {
 
   const sql = `
 with recent_dates as (
-  select observation_date
-  from app.daily_observations
-  group by observation_date
-  order by observation_date desc
+  select summary_date
+  from (
+    select summary_date from app.weather_snapshot_daily_rollups
+    union
+    select summary_date from app.scored_market_daily_rollups
+    union
+    select observation_date as summary_date from app.daily_observations
+  ) dates
+  group by summary_date
+  order by summary_date desc
   limit $1
 ),
-actuals as (
+actuals_official as (
   select
     ml.market_id,
     ml.city as location,
-    dobs.observation_date as forecast_date,
+    dobs.observation_date as summary_date,
     max(dobs.tmax_f) as actual_high_f
   from app.daily_observations dobs
   join app.market_locations ml on ml.market_id = dobs.market_id
-  join recent_dates rd on rd.observation_date = dobs.observation_date
+  join recent_dates rd on rd.summary_date = dobs.observation_date
   group by ml.market_id, ml.city, dobs.observation_date
 ),
-provider_latest as (
-  select distinct on (ws.market_id, ws.provider, wdf.forecast_date)
-    ws.market_id,
-    ws.provider,
-    wdf.forecast_date,
-    wdf.temperature_2m_max,
-    ws.pulled_at
-  from app.weather_daily_forecasts wdf
-  join app.weather_snapshots ws on ws.id = wdf.snapshot_id
-  join recent_dates rd on rd.observation_date = wdf.forecast_date
-  where ws.pulled_at::date <= wdf.forecast_date
-  order by ws.market_id, ws.provider, wdf.forecast_date, ws.pulled_at desc
+provider_rollups as (
+  select
+    wdr.market_id,
+    ml.city as location,
+    wdr.summary_date,
+    max(case when wdr.provider = 'noaa-nws' then wdr.max_daily_temperature_2m_max end) as noaa_high_f,
+    max(case when wdr.provider = 'open-meteo' then wdr.max_daily_temperature_2m_max end) as open_meteo_high_f,
+    max(case when wdr.provider = 'visual-crossing' then wdr.max_daily_temperature_2m_max end) as visual_crossing_high_f
+  from app.weather_snapshot_daily_rollups wdr
+  join app.market_locations ml on ml.market_id = wdr.market_id
+  join recent_dates rd on rd.summary_date = wdr.summary_date
+  group by wdr.market_id, ml.city, wdr.summary_date
 ),
-model_latest as (
-  select distinct on (sms.market_id, sms.forecast_date)
-    sms.market_id,
-    sms.forecast_date,
-    sms.adjusted_forecast_max_f,
-    sms.pulled_at
-  from app.scored_market_snapshots sms
-  join recent_dates rd on rd.observation_date = sms.forecast_date
-  where sms.pulled_at::date <= sms.forecast_date
-  order by sms.market_id, sms.forecast_date, sms.pulled_at desc
+model_rollups as (
+  select
+    km.market_id,
+    sdr.forecast_date,
+    max(sdr.last_adjusted_forecast_max_f) as model_high_f
+  from app.scored_market_daily_rollups sdr
+  join app.kalshi_markets km on km.ticker = sdr.ticker
+  join recent_dates rd on rd.summary_date = sdr.forecast_date
+  where sdr.forecast_date is not null
+  group by km.market_id, sdr.forecast_date
+),
+base_rows as (
+  select market_id, location, summary_date from actuals_official
+  union
+  select market_id, location, summary_date from provider_rollups
 )
 select
-  a.market_id,
-  a.location,
-  a.forecast_date,
-  a.actual_high_f,
-  max(case when p.provider = 'noaa-nws' then p.temperature_2m_max end) as noaa_high_f,
-  max(case when p.provider = 'open-meteo' then p.temperature_2m_max end) as open_meteo_high_f,
-  max(case when p.provider = 'visual-crossing' then p.temperature_2m_max end) as visual_crossing_high_f,
-  max(m.adjusted_forecast_max_f) as model_high_f
-from actuals a
-left join provider_latest p on p.market_id = a.market_id and p.forecast_date = a.forecast_date
-left join model_latest m on m.market_id = a.market_id and m.forecast_date = a.forecast_date
-group by a.market_id, a.location, a.forecast_date, a.actual_high_f
-order by a.location asc, a.forecast_date desc;
+  b.market_id,
+  b.location,
+  b.summary_date as forecast_date,
+  ao.actual_high_f,
+  pr.noaa_high_f,
+  pr.open_meteo_high_f,
+  pr.visual_crossing_high_f,
+  mr.model_high_f
+from base_rows b
+left join actuals_official ao on ao.market_id = b.market_id and ao.summary_date = b.summary_date
+left join provider_rollups pr on pr.market_id = b.market_id and pr.summary_date = b.summary_date
+left join model_rollups mr on mr.market_id = b.market_id and mr.forecast_date = b.summary_date
+order by b.location asc, b.summary_date desc;
 `;
 
   try {
