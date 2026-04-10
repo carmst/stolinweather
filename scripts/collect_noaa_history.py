@@ -187,7 +187,7 @@ def cli_report_observation(text: str) -> tuple[str, float] | None:
     if not date_match:
         return None
     observation_date = datetime.strptime(date_match.group(1), "%B %d %Y").date().isoformat()
-    max_match = re.search(r"(?:YESTERDAY|TODAY)\s+MAXIMUM\s+(\d+(?:\.\d+)?)", text_only)
+    max_match = re.search(r"YESTERDAY\s+MAXIMUM\s+(\d+(?:\.\d+)?)", text_only)
     if not max_match:
         return None
     return observation_date, float(max_match.group(1))
@@ -382,12 +382,14 @@ def supplement_existing_entry_with_cli(
     cli_station: dict[str, Any] | None,
     cli_rows: list[dict[str, Any]],
     pulled_at: str,
+    end_date: date,
 ) -> dict[str, Any]:
     observations_by_date: dict[str, dict[str, Any]] = {}
+    end_date_iso = end_date.isoformat()
 
     for row in existing_entry.get("observations", []):
         observed_date = row.get("date")
-        if not observed_date:
+        if not observed_date or observed_date > end_date_iso:
             continue
         observations_by_date[observed_date] = {
             **row,
@@ -476,7 +478,14 @@ def run_collection(config_path: Path, lookback_years: int, resume: bool) -> tupl
 
         if existing_entry is not None:
             entries.append(
-                supplement_existing_entry_with_cli(market, existing_entry, cli_station, cli_rows, pulled_at)
+                supplement_existing_entry_with_cli(
+                    market,
+                    existing_entry,
+                    cli_station,
+                    cli_rows,
+                    pulled_at,
+                    end_date,
+                )
             )
             continue
 
