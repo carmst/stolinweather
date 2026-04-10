@@ -1,53 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0; url=/new_history.html" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StolinWeather History</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>STOLIN WEATHER History</title>
+    <script>
+      window.location.replace("/new_history.html");
+    </script>
   </head>
   <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="brand" aria-label="StolinWeather">
-          <span class="brand-primary">STOLIN</span><span class="brand-accent">WEATHER</span>
-        </div>
-        <div class="status-pill">
-          <span class="status-dot"></span>
-          <span>Updated <span id="history-updated-time">--:--</span> UTC</span>
-        </div>
-      </header>
-
-      <nav class="tabs" aria-label="Primary">
-        <a class="tab" href="/index.html">Opportunities</a>
-        <button class="tab" type="button">Weather Signals</button>
-        <button class="tab" type="button">ML Features</button>
-        <a class="tab is-active" href="/history.html">History</a>
-      </nav>
-
-      <main class="dashboard history-dashboard">
-        <section class="panel history-panel">
-          <div class="panel-header">
-            <div>
-              <h1>Recent Forecast History</h1>
-              <p class="panel-subtitle">Last few daily highs by provider, model, and actual settlement</p>
-            </div>
-            <label class="filter-control">
-              <span>Days</span>
-              <select id="history-day-count">
-                <option value="3">3 days</option>
-                <option value="5" selected>5 days</option>
-                <option value="7">7 days</option>
-              </select>
-            </label>
-          </div>
-
-          <div id="history-summary" class="filter-summary"></div>
-          <div id="history-groups" class="history-groups"></div>
-        </section>
-      </main>
-    </div>
-
-    <script src="history.js"></script>
+    <p>Redirecting to <a href="/new_history.html">/new_history.html</a>...</p>
   </body>
 </html>

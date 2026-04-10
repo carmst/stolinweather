@@ -1,105 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
+    <meta charset="utf-8" />
+    <meta http-equiv="refresh" content="0; url=/landing.html" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>StolinWeather</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>STOLIN WEATHER</title>
+    <script>
+      window.location.replace("/landing.html");
+    </script>
   </head>
   <body>
-    <div class="app-shell">
-      <header class="topbar">
-        <div class="brand" aria-label="StolinWeather">
-          <span class="brand-primary">STOLIN</span><span class="brand-accent">WEATHER</span>
-        </div>
-        <div class="status-pill">
-          <span class="status-dot"></span>
-          <span>Updated <span id="updated-time">14:32</span> UTC</span>
-        </div>
-      </header>
-
-      <nav class="tabs" aria-label="Primary">
-        <button class="tab is-active" type="button">Opportunities</button>
-        <button class="tab" type="button">Weather Signals</button>
-        <button class="tab" type="button">ML Features</button>
-        <a class="tab" href="/history.html">History</a>
-      </nav>
-
-      <main class="dashboard">
-        <section class="hero-grid" id="metrics-grid" aria-label="Summary metrics"></section>
-
-        <section class="panel contracts-panel">
-          <div class="panel-header">
-            <h1>Active Kalshi Contracts</h1>
-            <span class="live-badge">LIVE</span>
-          </div>
-
-          <div class="contract-filters" aria-label="Contract filters">
-            <label class="filter-control">
-              <span>View</span>
-              <select id="view-filter">
-                <option value="best">Best By City</option>
-                <option value="all">All Contracts</option>
-              </select>
-            </label>
-            <label class="filter-control">
-              <span>Day</span>
-              <select id="day-filter">
-                <option value="all">Today + Tomorrow</option>
-                <option value="today">Today Only</option>
-                <option value="tomorrow">Tomorrow Only</option>
-              </select>
-            </label>
-            <label class="filter-control">
-              <span>Side</span>
-              <select id="side-filter">
-                <option value="all">Yes + No</option>
-                <option value="yes">Yes Only</option>
-                <option value="no">No Only</option>
-              </select>
-            </label>
-            <label class="filter-control filter-control-search">
-              <span>Search</span>
-              <input id="search-filter" type="search" placeholder="City or contract" />
-            </label>
-          </div>
-
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Contract</th>
-                  <th>Location</th>
-                  <th>NOAA High</th>
-                  <th>Model Forecast</th>
-                  <th>Model Confidence</th>
-                  <th>Kalshi Prediction %</th>
-                  <th>Cost</th>
-                  <th>Model Signal</th>
-                  <th>EV</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="contracts-body"></tbody>
-            </table>
-          </div>
-          <p class="filter-summary" id="filter-summary"></p>
-        </section>
-
-
-      </main>
-
-      <footer class="footer">
-        <div class="footer-meta">
-          <span><i></i> Local market schema</span>
-          <span><i></i> Forecast snapshot history</span>
-          <span class="accent"><i></i> Opportunity scoring API</span>
-          <span><i></i> ML roadmap scaffold</span>
-        </div>
-        <a href="/api/dashboard" class="setup-link">Open API ↗</a>
-      </footer>
-    </div>
-
-    <script src="script.js"></script>
+    <p>Redirecting to <a href="/landing.html">/landing.html</a>...</p>
   </body>
 </html>
