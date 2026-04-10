@@ -26,6 +26,23 @@ function formatDelta(forecast, actual) {
   return `${sign}${delta.toFixed(1)}F`;
 }
 
+function formatActualCell(row) {
+  const source = row.actualSource;
+  const sourceBadge =
+    source === "official"
+      ? '<span class="history-source-badge is-official">official</span>'
+      : source === "preliminary"
+        ? '<span class="history-source-badge is-preliminary">preliminary</span>'
+        : '<span class="history-source-badge">unknown</span>';
+
+  return `
+    <div class="history-actual-cell">
+      <span>${formatTemp(row.actualHighF)}</span>
+      ${source ? sourceBadge : ""}
+    </div>
+  `;
+}
+
 function renderGroups(payload) {
   const markets = payload.markets || [];
   if (!markets.length) {
@@ -69,7 +86,7 @@ function renderGroups(payload) {
                           <td>${formatTemp(row.openMeteoHighF)}</td>
                           <td>${formatTemp(row.visualCrossingHighF)}</td>
                           <td class="positive">${formatTemp(row.modelHighF)}</td>
-                          <td class="mono">${formatTemp(row.actualHighF)}</td>
+                          <td class="mono">${formatActualCell(row)}</td>
                           <td class="${typeof row.modelHighF === "number" && typeof row.actualHighF === "number" ? (row.modelHighF - row.actualHighF > 0 ? "negative" : "positive") : ""}">${formatDelta(row.modelHighF, row.actualHighF)}</td>
                         </tr>
                       `

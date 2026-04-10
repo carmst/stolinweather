@@ -569,8 +569,10 @@ function buildLocalHistoryPayload(dayCount = 5) {
         marketId,
         location: marketLabel,
         date: observation.date,
+        officialActualHighF: observation.tmax_f,
+        preliminaryActualHighF: null,
         actualHighF: observation.tmax_f,
-        actualSource: "official-noaa",
+        actualSource: "official",
       });
     }
   }
@@ -587,8 +589,10 @@ function buildLocalHistoryPayload(dayCount = 5) {
       marketId: row.market_id,
       location: row.location,
       date: row.forecast_date,
+      officialActualHighF: null,
+      preliminaryActualHighF: row.preliminary_high_f,
       actualHighF: row.preliminary_high_f,
-      actualSource: "preliminary-noaa",
+      actualSource: "preliminary",
     });
   }
 
@@ -602,8 +606,10 @@ function buildLocalHistoryPayload(dayCount = 5) {
         marketId: row.market_id,
         location: row.location,
         date: row.forecast_date,
+        officialActualHighF: null,
+        preliminaryActualHighF: row.preliminary_high_f,
         actualHighF: row.preliminary_high_f,
-        actualSource: "preliminary-noaa",
+        actualSource: "preliminary",
       });
     }
   }
@@ -896,16 +902,18 @@ async function queryHistoryPayloadFromDb(dayCount = 5) {
 
   const sql = `
 with recent_dates as (
-  select summary_date
+  select forecast_date as summary_date
   from (
-    select summary_date from app.weather_snapshot_daily_rollups
+    select wdf.forecast_date
+    from app.weather_daily_forecasts wdf
+    where wdf.forecast_date is not null
     union
-    select summary_date from app.scored_market_daily_rollups
-    union
-    select observation_date as summary_date from app.daily_observations
+    select sms.forecast_date
+    from app.scored_market_snapshots sms
+    where sms.forecast_date is not null
   ) dates
-  group by summary_date
-  order by summary_date desc
+  group by forecast_date
+  order by forecast_date desc
   limit $1
 ),
 actuals_official as (
@@ -917,6 +925,18 @@ actuals_official as (
   from app.daily_observations dobs
   join app.market_locations ml on ml.market_id = dobs.market_id
   join recent_dates rd on rd.summary_date = dobs.observation_date
+  group by ml.market_id, ml.city, dobs.observation_date
+),
+actuals_preliminary as (
+  select
+    ml.market_id,
+    ml.city as location,
+    dobs.observation_date as summary_date,
+    max(dobs.tmax_f) as preliminary_high_f
+  from app.daily_observations dobs
+  join app.market_locations ml on ml.market_id = dobs.market_id
+  join recent_dates rd on rd.summary_date = dobs.observation_date
+  where dobs.source_type = 'preliminary_intraday_max'
   group by ml.market_id, ml.city, dobs.observation_date
 ),
 provider_rollups as (
@@ -978,23 +998,35 @@ model_rollups_old as (
   group by sdr.ticker, sdr.forecast_date
 ),
 base_rows as (
-  select market_id, location, summary_date from actuals_official
-  union
   select market_id, location, summary_date from provider_rollups
   union
   select market_id, location, summary_date from provider_rollups_old
+  union
+  select market_id, location, summary_date from actuals_official
+  union
+  select market_id, location, summary_date from actuals_preliminary
+  union
+  select mr.market_id, ml.city as location, mr.forecast_date as summary_date
+  from model_rollups mr
+  join app.market_locations ml on ml.market_id = mr.market_id
+  union
+  select mro.market_id, ml.city as location, mro.forecast_date as summary_date
+  from model_rollups_old mro
+  join app.market_locations ml on ml.market_id = mro.market_id
 )
 select
   b.market_id,
   b.location,
   b.summary_date as forecast_date,
   ao.actual_high_f,
+  ap.preliminary_high_f,
   coalesce(pr.noaa_high_f, pro.noaa_high_f) as noaa_high_f,
   coalesce(pr.open_meteo_high_f, pro.open_meteo_high_f) as open_meteo_high_f,
   coalesce(pr.visual_crossing_high_f, pro.visual_crossing_high_f) as visual_crossing_high_f,
   coalesce(mr.model_high_f, mro.model_high_f) as model_high_f
 from base_rows b
 left join actuals_official ao on ao.market_id = b.market_id and ao.summary_date = b.summary_date
+left join actuals_preliminary ap on ap.market_id = b.market_id and ap.summary_date = b.summary_date
 left join provider_rollups pr on pr.market_id = b.market_id and pr.summary_date = b.summary_date
 left join provider_rollups_old pro on pro.market_id = b.market_id and pro.summary_date = b.summary_date
 left join model_rollups mr on mr.market_id = b.market_id and mr.forecast_date = b.summary_date
@@ -1008,7 +1040,15 @@ order by b.location asc, b.summary_date desc;
       marketId: row.market_id,
       location: row.location,
       date: row.forecast_date instanceof Date ? row.forecast_date.toISOString().slice(0, 10) : row.forecast_date,
-      actualHighF: row.actual_high_f == null ? null : Number(row.actual_high_f),
+      officialActualHighF: row.actual_high_f == null ? null : Number(row.actual_high_f),
+      preliminaryActualHighF: row.preliminary_high_f == null ? null : Number(row.preliminary_high_f),
+      actualHighF:
+        row.actual_high_f == null
+          ? row.preliminary_high_f == null
+            ? null
+            : Number(row.preliminary_high_f)
+          : Number(row.actual_high_f),
+      actualSource: row.actual_high_f == null ? (row.preliminary_high_f == null ? null : "preliminary") : "official",
       noaaHighF: row.noaa_high_f == null ? null : Number(row.noaa_high_f),
       openMeteoHighF: row.open_meteo_high_f == null ? null : Number(row.open_meteo_high_f),
       visualCrossingHighF: row.visual_crossing_high_f == null ? null : Number(row.visual_crossing_high_f),

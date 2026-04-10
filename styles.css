@@ -732,6 +732,35 @@ tbody tr.row-pass td:first-child {
   text-align: center;
 }
 
+.history-actual-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-source-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(158, 186, 255, 0.08);
+}
+
+.history-source-badge.is-official {
+  color: #9df2d4;
+  background: rgba(40, 199, 111, 0.16);
+}
+
+.history-source-badge.is-preliminary {
+  color: #ffd27a;
+  background: rgba(255, 181, 71, 0.16);
+}
+
 @media (max-width: 1100px) {
   .hero-grid,
   .intel-grid,
