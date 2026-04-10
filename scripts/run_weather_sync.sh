@@ -21,5 +21,9 @@ fi
 python3 scripts/collect_kalshi_markets.py --sync-db
 python3 scripts/collect_weather.py --sync-db
 python3 scripts/collect_noaa_weather.py --sync-db
+if [[ -n "${VISUAL_CROSSING_API_KEY:-}" ]]; then
+  python3 scripts/collect_visual_crossing_weather.py --sync-db --min-interval-minutes "${VISUAL_CROSSING_MIN_INTERVAL_MINUTES:-60}"
+fi
+python3 scripts/build_preliminary_daily_high_log.py --sync-db
 python3 scripts/score_temperature_markets.py --sync-db
 python3 scripts/prune_postgres_history.py --retention-days "${RAW_RETENTION_DAYS:-14}" --processed-change-retention-days "${PROCESSED_CHANGE_RETENTION_DAYS:-7}"

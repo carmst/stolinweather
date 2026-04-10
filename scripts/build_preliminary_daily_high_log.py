@@ -5,10 +5,20 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
+
+from load_json_to_postgres import (
+    DB_SCHEMA_PATH,
+    resolve_connection,
+    run_sql_file,
+    sync_preliminary_payload,
+    sync_reference_tables,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -164,6 +174,8 @@ def parse_args() -> argparse.Namespace:
         default=NOAA_SNAPSHOT_DIR,
         help="Directory of archived NOAA jsonl snapshot files to backfill intraday observations.",
     )
+    parser.add_argument("--sync-db", action="store_true", help="Also upsert the preliminary daily highs into Postgres.")
+    parser.add_argument("--init-db-schema", action="store_true", help="Apply db/schema.sql before syncing to Postgres.")
     return parser.parse_args()
 
 
@@ -185,6 +197,21 @@ def main() -> int:
     print(f"Built {len(rows)} preliminary daily highs")
     print(f"Latest file: {LATEST_PATH}")
     print(f"Snapshot file: {snapshot_path}")
+
+    if args.sync_db:
+        try:
+            psql, database_url = resolve_connection()
+            if args.init_db_schema:
+                run_sql_file(psql, database_url, DB_SCHEMA_PATH)
+            sync_reference_tables(psql, database_url)
+            sync_preliminary_payload(psql, database_url, payload)
+            print("Synced preliminary daily highs to Postgres")
+        except RuntimeError as error:
+            print(str(error), file=sys.stderr)
+            return 1
+        except subprocess.CalledProcessError as error:
+            print(f"Postgres sync error: {error}", file=sys.stderr)
+            return error.returncode or 1
     return 0
 
 

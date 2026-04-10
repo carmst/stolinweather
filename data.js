@@ -927,6 +927,7 @@ actuals_official as (
   from app.daily_observations dobs
   join app.market_locations ml on ml.market_id = dobs.market_id
   join recent_dates rd on rd.summary_date = dobs.observation_date
+  where dobs.source_type <> 'preliminary_intraday_max'
   group by ml.market_id, ml.city, dobs.observation_date
 ),
 actuals_preliminary as (

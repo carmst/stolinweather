@@ -25,7 +25,11 @@ fi
 
 python3 scripts/collect_kalshi_markets.py --sync-db --init-db-schema
 python3 scripts/collect_noaa_history.py --lookback-years 1 --resume --sync-db
-python3 scripts/build_preliminary_daily_high_log.py
+if [[ -n "${VISUAL_CROSSING_API_KEY:-}" ]]; then
+  python3 scripts/collect_visual_crossing_weather.py --sync-db --min-interval-minutes 0
+fi
+python3 scripts/build_preliminary_daily_high_log.py --sync-db
 python3 scripts/score_temperature_markets.py --sync-db
+python3 scripts/log_daily_city_bets.py --date "$(date +%F)" --sync-db
 python3 scripts/resolve_daily_city_bets.py --date "$(date -v-1d +%F)" --sync-db
 python3 scripts/prune_postgres_history.py --retention-days "${RAW_RETENTION_DAYS:-14}" --processed-change-retention-days "${PROCESSED_CHANGE_RETENTION_DAYS:-7}" --init-db-schema
