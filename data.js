@@ -907,10 +907,12 @@ with recent_dates as (
     select wdf.forecast_date
     from app.weather_daily_forecasts wdf
     where wdf.forecast_date is not null
+      and wdf.forecast_date <= current_date
     union
     select sms.forecast_date
     from app.scored_market_snapshots sms
     where sms.forecast_date is not null
+      and sms.forecast_date <= current_date
   ) dates
   group by forecast_date
   order by forecast_date desc
