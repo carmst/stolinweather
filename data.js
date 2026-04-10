@@ -1823,28 +1823,26 @@ function formatDriverSignal(market) {
   function cutoffStory(delta, winDirection) {
     const bucket = classifyDelta(delta);
     const absDelta = Math.abs(delta).toFixed(1);
+    const directionWord = delta >= 0 ? "above" : "below";
 
     if (bucket === "center") {
       return combine("Coin flip", "center");
     }
 
     if (bucket === "live") {
-      return combine(
-        winDirection ? `Both sides live | Center +${absDelta}F` : `Both sides live | Center -${absDelta}F`,
-        "live"
-      );
+      return combine(`Forecast is ${absDelta}F ${directionWord} the line`, "live");
     }
 
     if (bucket === "lean") {
       return combine(
-        winDirection ? `Win side favored | +${absDelta}F` : `Lose side favored | -${absDelta}F`,
+        winDirection ? `Model leans ${absDelta}F toward our side` : `Model leans ${absDelta}F against our side`,
         "lean"
       );
     }
 
     if (bucket === "tail") {
       return combine(
-        winDirection ? `Tail against us | ${absDelta}F buffer` : `Tail only | Needs ${absDelta}F move`,
+        winDirection ? `Model clears the line by ${absDelta}F` : `Needs a ${absDelta}F swing to get there`,
         "tail"
       );
     }
@@ -1867,13 +1865,13 @@ function formatDriverSignal(market) {
       return combine("Coin flip", "center");
     }
     if (bucket === "live") {
-      return combine(`Both sides live | Range ${absDelta}F away`, "live");
+      return combine(`Forecast sits ${absDelta}F from the nearest edge`, "live");
     }
     if (bucket === "lean") {
-      return combine(`Range miss | ${absDelta}F`, "lean");
+      return combine(`Forecast misses the range by ${absDelta}F`, "lean");
     }
     if (bucket === "tail") {
-      return combine(`Tail only | Needs ${absDelta}F move`, "tail");
+      return combine(`Needs a ${absDelta}F move to reach the range`, "tail");
     }
 
     return combine(lowAbs < highAbs ? "Lower edge closer" : "Upper edge closer", null);
@@ -1898,7 +1896,7 @@ function formatDriverSignal(market) {
   }
 
   if (typeof sigma === "number" && sigma >= 4.5) {
-    return combine(`Both sides live | Spread ${sigma.toFixed(1)}F`, "live");
+    return combine(`Wide uncertainty band (${sigma.toFixed(1)}F)`, "live");
   }
 
   if (typeof noaaForecast === "number" && typeof openMeteoForecast === "number") {
