@@ -670,6 +670,68 @@ tbody tr.row-pass td:first-child {
   text-align: center;
  }
 
+.tab {
+  text-decoration: none;
+}
+
+.panel-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.history-dashboard {
+  display: block;
+}
+
+.history-panel {
+  padding: 24px 26px 28px;
+}
+
+.history-groups {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.history-market-card {
+  border: 1px solid rgba(158, 186, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(13, 21, 36, 0.72);
+  overflow: hidden;
+}
+
+.history-market-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  padding: 18px 20px 10px;
+}
+
+.history-market-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.history-market-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.history-table th,
+.history-table td {
+  white-space: nowrap;
+}
+
+.empty-history {
+  border: 1px dashed rgba(158, 186, 255, 0.18);
+  border-radius: 16px;
+  padding: 28px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
 @media (max-width: 1100px) {
   .hero-grid,
   .intel-grid,

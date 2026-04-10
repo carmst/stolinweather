@@ -4,6 +4,10 @@ const { Pool } = require("pg");
 
 const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_markets.json");
 const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
+const noaaHistoryLatestPath = path.join(__dirname, "output", "history", "latest_noaa_history.json");
+const preliminaryHighsLatestPath = path.join(__dirname, "output", "preliminary", "latest_preliminary_daily_highs.json");
+const weatherSnapshotsDir = path.join(__dirname, "output", "weather", "snapshots");
+const modelSnapshotsDir = path.join(__dirname, "output", "models", "snapshots");
 const databaseUrl = process.env.DATABASE_URL;
 let databasePool = null;
 let lastDbDebugReason = null;
@@ -482,6 +486,211 @@ function loadModelPayload() {
   }
 }
 
+function loadNoaaHistoryPayload() {
+  try {
+    const raw = fs.readFileSync(noaaHistoryLatestPath, "utf8");
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function loadPreliminaryHighsPayload() {
+  try {
+    const raw = fs.readFileSync(preliminaryHighsLatestPath, "utf8");
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function loadJsonLines(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
+    return raw
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => JSON.parse(line));
+  } catch (_error) {
+    return [];
+  }
+}
+
+function addDaysToIsoDate(dateString, offset) {
+  const date = new Date(`${dateString}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function getRecentIsoDates(count) {
+  const today = new Date().toISOString().slice(0, 10);
+  return Array.from({ length: count }, (_value, index) => addDaysToIsoDate(today, -index)).sort();
+}
+
+function buildLocalHistoryPayload(dayCount = 5) {
+  const recentDates = new Set(getRecentIsoDates(dayCount));
+  const actualsPayload = loadNoaaHistoryPayload();
+  const preliminaryPayload = loadPreliminaryHighsPayload();
+  if (!actualsPayload && !preliminaryPayload) {
+    return { updatedAt: new Date().toISOString(), dayCount, rows: [], markets: [] };
+  }
+
+  const actualIndex = new Map();
+  for (const location of actualsPayload?.locations || []) {
+    const marketId = location.market?.market_id;
+    const marketLabel = location.market?.location;
+    if (!marketId || !marketLabel) {
+      continue;
+    }
+    for (const observation of location.observations || []) {
+      if (!recentDates.has(observation.date)) {
+        continue;
+      }
+      const key = `${marketId}|${observation.date}`;
+      actualIndex.set(key, {
+        marketId,
+        location: marketLabel,
+        date: observation.date,
+        actualHighF: observation.tmax_f,
+        actualSource: "official-noaa",
+      });
+    }
+  }
+
+  for (const row of preliminaryPayload?.rows || []) {
+    if (!recentDates.has(row.forecast_date)) {
+      continue;
+    }
+    const key = `${row.market_id}|${row.forecast_date}`;
+    if (actualIndex.has(key)) {
+      continue;
+    }
+    actualIndex.set(key, {
+      marketId: row.market_id,
+      location: row.location,
+      date: row.forecast_date,
+      actualHighF: row.preliminary_high_f,
+      actualSource: "preliminary-noaa",
+    });
+  }
+
+  if (actualIndex.size === 0) {
+    for (const row of preliminaryPayload?.rows || []) {
+      if (!recentDates.has(row.forecast_date)) {
+        continue;
+      }
+      const key = `${row.market_id}|${row.forecast_date}`;
+      actualIndex.set(key, {
+        marketId: row.market_id,
+        location: row.location,
+        date: row.forecast_date,
+        actualHighF: row.preliminary_high_f,
+        actualSource: "preliminary-noaa",
+      });
+    }
+  }
+
+  const providerIndex = new Map();
+  for (const entry of fs.existsSync(weatherSnapshotsDir) ? fs.readdirSync(weatherSnapshotsDir) : []) {
+    const isRelevant =
+      entry.endsWith(".jsonl") &&
+      (entry.includes("-noaa") || entry.includes("-visual-crossing") || (!entry.includes("-") || entry.endsWith(".jsonl") && !entry.includes("-noaa") && !entry.includes("-visual-crossing")));
+    if (!isRelevant) {
+      continue;
+    }
+    for (const snapshot of loadJsonLines(path.join(weatherSnapshotsDir, entry))) {
+      const provider = snapshot.provider;
+      const marketId = snapshot.market?.market_id;
+      if (!provider || !marketId) {
+        continue;
+      }
+      const pulledAt = snapshot.pulled_at;
+      for (const daily of snapshot.daily || []) {
+        const forecastDate = daily.date;
+        if (!recentDates.has(forecastDate)) {
+          continue;
+        }
+        if (!pulledAt || pulledAt.slice(0, 10) > forecastDate) {
+          continue;
+        }
+        const key = `${marketId}|${forecastDate}|${provider}`;
+        const existing = providerIndex.get(key);
+        if (!existing || existing.pulledAt < pulledAt) {
+          providerIndex.set(key, {
+            pulledAt,
+            value: daily.temperature_2m_max,
+          });
+        }
+      }
+    }
+  }
+
+  const modelIndex = new Map();
+  for (const entry of fs.existsSync(modelSnapshotsDir) ? fs.readdirSync(modelSnapshotsDir) : []) {
+    if (!entry.endsWith(".jsonl")) {
+      continue;
+    }
+    for (const payload of loadJsonLines(path.join(modelSnapshotsDir, entry))) {
+      const pulledAt = payload.pulled_at;
+      for (const market of payload.markets || []) {
+        const marketId = market.weather_market_id;
+        const forecastDate = market.forecast_date;
+        if (!marketId || !forecastDate || !recentDates.has(forecastDate)) {
+          continue;
+        }
+        if (!pulledAt || pulledAt.slice(0, 10) > forecastDate) {
+          continue;
+        }
+        const key = `${marketId}|${forecastDate}`;
+        const existing = modelIndex.get(key);
+        if (!existing || existing.pulledAt < pulledAt) {
+          modelIndex.set(key, {
+            pulledAt,
+            adjustedForecastMaxF: market.adjusted_forecast_max_f,
+          });
+        }
+      }
+    }
+  }
+
+  const rows = [...actualIndex.values()]
+    .map((row) => {
+      const baseKey = `${row.marketId}|${row.date}`;
+      return {
+        ...row,
+        noaaHighF: providerIndex.get(`${baseKey}|noaa-nws`)?.value ?? null,
+        openMeteoHighF: providerIndex.get(`${baseKey}|open-meteo`)?.value ?? null,
+        visualCrossingHighF: providerIndex.get(`${baseKey}|visual-crossing`)?.value ?? null,
+        modelHighF: modelIndex.get(baseKey)?.adjustedForecastMaxF ?? null,
+      };
+    })
+    .sort((left, right) => {
+      if (left.location !== right.location) {
+        return left.location.localeCompare(right.location);
+      }
+      return right.date.localeCompare(left.date);
+    });
+
+  const markets = [];
+  const byMarket = new Map();
+  for (const row of rows) {
+    if (!byMarket.has(row.marketId)) {
+      byMarket.set(row.marketId, { marketId: row.marketId, location: row.location, rows: [] });
+      markets.push(byMarket.get(row.marketId));
+    }
+    byMarket.get(row.marketId).rows.push(row);
+  }
+
+  return {
+    updatedAt: new Date().toISOString(),
+    dayCount,
+    dates: [...recentDates].sort().reverse(),
+    rows,
+    markets,
+  };
+}
+
 async function queryJsonFromDb(sql) {
   const pool = getDatabasePool();
   if (!pool) {
@@ -654,6 +863,110 @@ join app.kalshi_events ke on ke.event_ticker = km.event_ticker;
 `;
 
   return queryJsonFromDb(sql);
+}
+
+async function queryHistoryPayloadFromDb(dayCount = 5) {
+  if (!databaseUrl) {
+    lastDbDebugReason = "DATABASE_URL not set";
+    return null;
+  }
+
+  const pool = getDatabasePool();
+  if (!pool) {
+    lastDbDebugReason = "DATABASE_URL not set";
+    return null;
+  }
+
+  const sql = `
+with recent_dates as (
+  select observation_date
+  from app.daily_observations
+  group by observation_date
+  order by observation_date desc
+  limit $1
+),
+actuals as (
+  select
+    ml.market_id,
+    ml.city as location,
+    dobs.observation_date as forecast_date,
+    max(dobs.tmax_f) as actual_high_f
+  from app.daily_observations dobs
+  join app.market_locations ml on ml.market_id = dobs.market_id
+  join recent_dates rd on rd.observation_date = dobs.observation_date
+  group by ml.market_id, ml.city, dobs.observation_date
+),
+provider_latest as (
+  select distinct on (ws.market_id, ws.provider, wdf.forecast_date)
+    ws.market_id,
+    ws.provider,
+    wdf.forecast_date,
+    wdf.temperature_2m_max,
+    ws.pulled_at
+  from app.weather_daily_forecasts wdf
+  join app.weather_snapshots ws on ws.id = wdf.snapshot_id
+  join recent_dates rd on rd.observation_date = wdf.forecast_date
+  where ws.pulled_at::date <= wdf.forecast_date
+  order by ws.market_id, ws.provider, wdf.forecast_date, ws.pulled_at desc
+),
+model_latest as (
+  select distinct on (sms.market_id, sms.forecast_date)
+    sms.market_id,
+    sms.forecast_date,
+    sms.adjusted_forecast_max_f,
+    sms.pulled_at
+  from app.scored_market_snapshots sms
+  join recent_dates rd on rd.observation_date = sms.forecast_date
+  where sms.pulled_at::date <= sms.forecast_date
+  order by sms.market_id, sms.forecast_date, sms.pulled_at desc
+)
+select
+  a.market_id,
+  a.location,
+  a.forecast_date,
+  a.actual_high_f,
+  max(case when p.provider = 'noaa-nws' then p.temperature_2m_max end) as noaa_high_f,
+  max(case when p.provider = 'open-meteo' then p.temperature_2m_max end) as open_meteo_high_f,
+  max(case when p.provider = 'visual-crossing' then p.temperature_2m_max end) as visual_crossing_high_f,
+  max(m.adjusted_forecast_max_f) as model_high_f
+from actuals a
+left join provider_latest p on p.market_id = a.market_id and p.forecast_date = a.forecast_date
+left join model_latest m on m.market_id = a.market_id and m.forecast_date = a.forecast_date
+group by a.market_id, a.location, a.forecast_date, a.actual_high_f
+order by a.location asc, a.forecast_date desc;
+`;
+
+  try {
+    const result = await pool.query(sql, [dayCount]);
+    const rows = result.rows.map((row) => ({
+      marketId: row.market_id,
+      location: row.location,
+      date: row.forecast_date instanceof Date ? row.forecast_date.toISOString().slice(0, 10) : row.forecast_date,
+      actualHighF: row.actual_high_f == null ? null : Number(row.actual_high_f),
+      noaaHighF: row.noaa_high_f == null ? null : Number(row.noaa_high_f),
+      openMeteoHighF: row.open_meteo_high_f == null ? null : Number(row.open_meteo_high_f),
+      visualCrossingHighF: row.visual_crossing_high_f == null ? null : Number(row.visual_crossing_high_f),
+      modelHighF: row.model_high_f == null ? null : Number(row.model_high_f),
+    }));
+    const markets = [];
+    const byMarket = new Map();
+    for (const row of rows) {
+      if (!byMarket.has(row.marketId)) {
+        byMarket.set(row.marketId, { marketId: row.marketId, location: row.location, rows: [] });
+        markets.push(byMarket.get(row.marketId));
+      }
+      byMarket.get(row.marketId).rows.push(row);
+    }
+    return {
+      updatedAt: new Date().toISOString(),
+      dayCount,
+      rows,
+      markets,
+    };
+  } catch (_error) {
+    lastDbDebugReason = _error && _error.message ? _error.message : "Unknown DB error";
+    return null;
+  }
 }
 
 function mergeMarketPayloads(kalshiPayload, modelPayload) {
@@ -867,6 +1180,39 @@ function isTradableContractCost(contractCost) {
   );
 }
 
+function computeCitySelectionScore(contract) {
+  if (typeof contract.backendCitySelectionScore === "number") {
+    return contract.backendCitySelectionScore;
+  }
+
+  const expectedValue = typeof contract.expectedValue === "number" ? contract.expectedValue : -1;
+  const confidence = typeof contract.confidence === "number" ? contract.confidence : 0;
+  const modelProb = typeof contract.modelProb === "number" ? contract.modelProb : 0.5;
+  const conviction = Math.abs(modelProb - 0.5);
+  const hasModeledForecast = typeof contract.adjustedForecastMaxF === "number";
+  const setupBonus =
+    contract.setupLabel === "BEST"
+      ? 18
+      : contract.setupLabel === "PLAYABLE"
+        ? 10
+        : contract.setupLabel === "THIN"
+          ? 2
+          : -20;
+  const sourceBonus = contract.marketSource === "model-scored" ? 8 : -25;
+  const forecastBonus = hasModeledForecast ? 6 : -12;
+
+  return Number(
+    (
+      expectedValue * 160 +
+      confidence * 28 +
+      conviction * 40 +
+      setupBonus +
+      sourceBonus +
+      forecastBonus
+    ).toFixed(2)
+  );
+}
+
 function selectBestContractPerCity(markets) {
   const bestByCity = new Map();
 
@@ -874,13 +1220,13 @@ function selectBestContractPerCity(markets) {
     const city = market.location || market.cityLabel || extractCityLabel(market);
     const existing = bestByCity.get(city);
 
-    if (!existing || (market.opportunityScore ?? -Infinity) > (existing.opportunityScore ?? -Infinity)) {
+    if (!existing || (market.citySelectionScore ?? -Infinity) > (existing.citySelectionScore ?? -Infinity)) {
       bestByCity.set(city, { ...market, cityLabel: city });
     }
   }
 
   return [...bestByCity.values()].sort(
-    (left, right) => (right.opportunityScore ?? -Infinity) - (left.opportunityScore ?? -Infinity)
+    (left, right) => (right.citySelectionScore ?? -Infinity) - (left.citySelectionScore ?? -Infinity)
   );
 }
 
@@ -1044,6 +1390,9 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     kalshiProb: typeof market.implied_probability === "number" ? market.implied_probability : 0,
     modelProb,
     winProbability: pricing.winProb,
+    adjustedForecastMaxF: typeof market.adjusted_forecast_max_f === "number" ? market.adjusted_forecast_max_f : null,
+    backendCitySelectionScore:
+      typeof market.city_model_rank_score === "number" ? market.city_model_rank_score : null,
     signal: formatModelSignal(market),
     leadHours: 0,
     closeTimeUtc: market.close_time || "",
@@ -1071,6 +1420,7 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     payoutRatioDisplay: formatMultiplier(payoutRatio),
     opportunityScore,
     displayRankScore,
+    citySelectionScore: 0,
     inspectUrl: buildKalshiUrl(market),
     confidenceLabel: confidenceBand.label,
     confidenceClass: confidenceBand.className,
@@ -1360,7 +1710,7 @@ function normalizeScoredContracts(markets) {
       opportunityScore,
     });
 
-    return buildNormalizedContract(
+    const contract = buildNormalizedContract(
       market,
       modelProb,
       edge,
@@ -1370,6 +1720,11 @@ function normalizeScoredContracts(markets) {
       displayRankScore,
       hasRealModelScore(market) ? "model-scored" : "kalshi-fallback"
     );
+
+    return {
+      ...contract,
+      citySelectionScore: computeCitySelectionScore(contract),
+    };
   });
 
   const tradable = normalized.filter((market) => market.isTradable && market.status !== "settled");
@@ -1406,7 +1761,7 @@ function normalizeKalshiContracts(markets) {
       opportunityScore,
     });
 
-    return buildNormalizedContract(
+    const contract = buildNormalizedContract(
       market,
       syntheticModelProb,
       edge,
@@ -1416,6 +1771,11 @@ function normalizeKalshiContracts(markets) {
       displayRankScore,
       "kalshi-live"
     );
+
+    return {
+      ...contract,
+      citySelectionScore: computeCitySelectionScore(contract),
+    };
   });
 
   const tradable = normalized.filter((market) => market.isTradable && market.status !== "settled");
@@ -1547,6 +1907,20 @@ async function buildDashboard() {
   };
 }
 
+async function buildHistoryView(dayCount = 5) {
+  const liveHistory = await queryHistoryPayloadFromDb(dayCount);
+  const payload = liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0
+    ? liveHistory
+    : buildLocalHistoryPayload(dayCount);
+  return {
+    updatedAt: new Date().toISOString(),
+    dataBackend: liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0 ? "postgres" : "static-json",
+    dataBackendReason: liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0 ? null : lastDbDebugReason,
+    ...payload,
+  };
+}
+
 module.exports = {
   buildDashboard,
+  buildHistoryView,
 };

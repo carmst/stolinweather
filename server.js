@@ -1,7 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { buildDashboard } = require("./data");
+const { buildDashboard, buildHistoryView } = require("./data");
 
 const port = process.env.PORT || 4181;
 const root = __dirname;
@@ -41,6 +41,12 @@ const server = http.createServer(async (request, response) => {
 
   if (url.pathname === "/api/dashboard") {
     sendJson(response, 200, await buildDashboard());
+    return;
+  }
+
+  if (url.pathname === "/api/history") {
+    const dayCount = Number.parseInt(url.searchParams.get("days") || "5", 10);
+    sendJson(response, 200, await buildHistoryView(Number.isNaN(dayCount) ? 5 : Math.min(Math.max(dayCount, 3), 7)));
     return;
   }
 
