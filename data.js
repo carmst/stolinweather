@@ -6,8 +6,10 @@ const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_market
 const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
 const noaaHistoryLatestPath = path.join(__dirname, "output", "history", "latest_noaa_history.json");
 const preliminaryHighsLatestPath = path.join(__dirname, "output", "preliminary", "latest_preliminary_daily_highs.json");
+const trackedMarketsPath = path.join(__dirname, "config", "tracked_markets.json");
 const weatherSnapshotsDir = path.join(__dirname, "output", "weather", "snapshots");
 const modelSnapshotsDir = path.join(__dirname, "output", "models", "snapshots");
+const HISTORY_CHECKPOINT_HOUR_LOCAL = 8;
 const databaseUrl = process.env.DATABASE_URL;
 let databasePool = null;
 let lastDbDebugReason = null;
@@ -534,6 +536,50 @@ function loadJsonLines(filePath) {
   }
 }
 
+function loadTrackedMarkets() {
+  try {
+    const raw = fs.readFileSync(trackedMarketsPath, "utf8");
+    return JSON.parse(raw);
+  } catch (_error) {
+    return [];
+  }
+}
+
+function getCheckpointUtcForMarketDay(dateString, timeZone, hour = HISTORY_CHECKPOINT_HOUR_LOCAL) {
+  if (!dateString || !timeZone) {
+    return null;
+  }
+
+  const [year, month, day] = dateString.split("-").map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const targetUtcMillis = Date.UTC(year, month - 1, day, hour, 0, 0);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date(targetUtcMillis));
+  const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  const observedUtcMillis = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second)
+  );
+
+  return new Date(targetUtcMillis + (targetUtcMillis - observedUtcMillis));
+}
+
 function addDaysToIsoDate(dateString, offset) {
   const date = new Date(`${dateString}T12:00:00Z`);
   date.setUTCDate(date.getUTCDate() + offset);
@@ -549,6 +595,10 @@ function buildLocalHistoryPayload(dayCount = 5) {
   const recentDates = new Set(getRecentIsoDates(dayCount));
   const actualsPayload = loadNoaaHistoryPayload();
   const preliminaryPayload = loadPreliminaryHighsPayload();
+  const trackedMarkets = loadTrackedMarkets();
+  const timeZoneByMarketId = new Map(
+    trackedMarkets.map((market) => [market.market_id, market.timezone || "America/New_York"])
+  );
   if (!actualsPayload && !preliminaryPayload) {
     return { updatedAt: new Date().toISOString(), dayCount, rows: [], markets: [] };
   }
@@ -634,7 +684,11 @@ function buildLocalHistoryPayload(dayCount = 5) {
         if (!recentDates.has(forecastDate)) {
           continue;
         }
-        if (!pulledAt || pulledAt.slice(0, 10) > forecastDate) {
+        const checkpointUtc = getCheckpointUtcForMarketDay(
+          forecastDate,
+          timeZoneByMarketId.get(marketId) || "America/New_York"
+        );
+        if (!pulledAt || !checkpointUtc || new Date(pulledAt) > checkpointUtc) {
           continue;
         }
         const key = `${marketId}|${forecastDate}|${provider}`;
@@ -662,7 +716,11 @@ function buildLocalHistoryPayload(dayCount = 5) {
         if (!marketId || !forecastDate || !recentDates.has(forecastDate)) {
           continue;
         }
-        if (!pulledAt || pulledAt.slice(0, 10) > forecastDate) {
+        const checkpointUtc = getCheckpointUtcForMarketDay(
+          forecastDate,
+          timeZoneByMarketId.get(marketId) || "America/New_York"
+        );
+        if (!pulledAt || !checkpointUtc || new Date(pulledAt) > checkpointUtc) {
           continue;
         }
         const key = `${marketId}|${forecastDate}`;
@@ -918,6 +976,24 @@ with recent_dates as (
   order by forecast_date desc
   limit $1
 ),
+market_checkpoints as (
+  select
+    ml.market_id,
+    ml.city as location,
+    ml.timezone,
+    rd.summary_date,
+    make_timestamptz(
+      extract(year from rd.summary_date)::int,
+      extract(month from rd.summary_date)::int,
+      extract(day from rd.summary_date)::int,
+      ${HISTORY_CHECKPOINT_HOUR_LOCAL},
+      0,
+      0,
+      ml.timezone
+    ) as checkpoint_utc
+  from app.market_locations ml
+  cross join recent_dates rd
+),
 actuals_official as (
   select
     ml.market_id,
@@ -942,20 +1018,34 @@ actuals_preliminary as (
   where dobs.source_type = 'preliminary_intraday_max'
   group by ml.market_id, ml.city, dobs.observation_date
 ),
-provider_rollups as (
+provider_rollups_ranked as (
   select
-    ws.market_id,
-    ml.city as location,
+    mc.market_id,
+    mc.location,
     wdf.forecast_date as summary_date,
-    max(case when ws.provider = 'noaa-nws' then wdf.temperature_2m_max end) as noaa_high_f,
-    max(case when ws.provider = 'open-meteo' then wdf.temperature_2m_max end) as open_meteo_high_f,
-    max(case when ws.provider = 'visual-crossing' then wdf.temperature_2m_max end) as visual_crossing_high_f
+    ws.provider,
+    wdf.temperature_2m_max,
+    ws.pulled_at,
+    row_number() over (
+      partition by mc.market_id, wdf.forecast_date, ws.provider
+      order by ws.pulled_at desc
+    ) as rn
   from app.weather_daily_forecasts wdf
   join app.weather_snapshots ws on ws.id = wdf.snapshot_id
-  join app.market_locations ml on ml.market_id = ws.market_id
-  join recent_dates rd on rd.summary_date = wdf.forecast_date
-  where ws.pulled_at::date <= wdf.forecast_date
-  group by ws.market_id, ml.city, wdf.forecast_date
+  join market_checkpoints mc on mc.market_id = ws.market_id and mc.summary_date = wdf.forecast_date
+  where ws.pulled_at <= mc.checkpoint_utc
+),
+provider_rollups as (
+  select
+    market_id,
+    location,
+    summary_date,
+    max(case when provider = 'noaa-nws' then temperature_2m_max end) as noaa_high_f,
+    max(case when provider = 'open-meteo' then temperature_2m_max end) as open_meteo_high_f,
+    max(case when provider = 'visual-crossing' then temperature_2m_max end) as visual_crossing_high_f
+  from provider_rollups_ranked
+  where rn = 1
+  group by market_id, location, summary_date
 ),
 provider_rollups_old as (
   select
@@ -970,19 +1060,33 @@ provider_rollups_old as (
   join recent_dates rd on rd.summary_date = wdr.summary_date
   group by wdr.market_id, ml.city, wdr.summary_date
 ),
-model_rollups as (
+model_rollups_ranked as (
   select
     coalesce(sms.market_id, sms.weather_market_id, ml_map.market_id) as market_id,
     sms.forecast_date,
-    max(sms.adjusted_forecast_max_f) as model_high_f
+    sms.adjusted_forecast_max_f as model_high_f,
+    sms.pulled_at,
+    row_number() over (
+      partition by coalesce(sms.market_id, sms.weather_market_id, ml_map.market_id), sms.forecast_date
+      order by sms.pulled_at desc
+    ) as rn
   from app.scored_market_snapshots sms
   join app.kalshi_markets km on km.ticker = sms.ticker
   left join app.market_locations ml_map
     on km.series_ticker = any(ml_map.kalshi_series)
-  join recent_dates rd on rd.summary_date = sms.forecast_date
+  join market_checkpoints mc
+    on mc.market_id = coalesce(sms.market_id, sms.weather_market_id, ml_map.market_id)
+   and mc.summary_date = sms.forecast_date
   where sms.forecast_date is not null
-    and sms.pulled_at::date <= sms.forecast_date
-  group by coalesce(sms.market_id, sms.weather_market_id, ml_map.market_id), sms.forecast_date
+    and sms.pulled_at <= mc.checkpoint_utc
+),
+model_rollups as (
+  select
+    market_id,
+    forecast_date,
+    model_high_f
+  from model_rollups_ranked
+  where rn = 1
 ),
 model_rollups_old as (
   select
