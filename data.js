@@ -921,6 +921,21 @@ actuals_official as (
 ),
 provider_rollups as (
   select
+    ws.market_id,
+    ml.city as location,
+    wdf.forecast_date as summary_date,
+    max(case when ws.provider = 'noaa-nws' then wdf.temperature_2m_max end) as noaa_high_f,
+    max(case when ws.provider = 'open-meteo' then wdf.temperature_2m_max end) as open_meteo_high_f,
+    max(case when ws.provider = 'visual-crossing' then wdf.temperature_2m_max end) as visual_crossing_high_f
+  from app.weather_daily_forecasts wdf
+  join app.weather_snapshots ws on ws.id = wdf.snapshot_id
+  join app.market_locations ml on ml.market_id = ws.market_id
+  join recent_dates rd on rd.summary_date = wdf.forecast_date
+  where ws.pulled_at::date <= wdf.forecast_date
+  group by ws.market_id, ml.city, wdf.forecast_date
+),
+provider_rollups_old as (
+  select
     wdr.market_id,
     ml.city as location,
     wdr.summary_date,
@@ -933,6 +948,20 @@ provider_rollups as (
   group by wdr.market_id, ml.city, wdr.summary_date
 ),
 model_rollups as (
+  select
+    coalesce(sms.market_id, sms.weather_market_id, ml_map.market_id) as market_id,
+    sms.forecast_date,
+    max(sms.adjusted_forecast_max_f) as model_high_f
+  from app.scored_market_snapshots sms
+  join app.kalshi_markets km on km.ticker = sms.ticker
+  left join app.market_locations ml_map
+    on km.series_ticker = any(ml_map.kalshi_series)
+  join recent_dates rd on rd.summary_date = sms.forecast_date
+  where sms.forecast_date is not null
+    and sms.pulled_at::date <= sms.forecast_date
+  group by coalesce(sms.market_id, sms.weather_market_id, ml_map.market_id), sms.forecast_date
+),
+model_rollups_old as (
   select
     coalesce(max(sms.market_id), max(sms.weather_market_id), max(ml_map.market_id)) as market_id,
     sdr.forecast_date,
@@ -952,20 +981,24 @@ base_rows as (
   select market_id, location, summary_date from actuals_official
   union
   select market_id, location, summary_date from provider_rollups
+  union
+  select market_id, location, summary_date from provider_rollups_old
 )
 select
   b.market_id,
   b.location,
   b.summary_date as forecast_date,
   ao.actual_high_f,
-  pr.noaa_high_f,
-  pr.open_meteo_high_f,
-  pr.visual_crossing_high_f,
-  mr.model_high_f
+  coalesce(pr.noaa_high_f, pro.noaa_high_f) as noaa_high_f,
+  coalesce(pr.open_meteo_high_f, pro.open_meteo_high_f) as open_meteo_high_f,
+  coalesce(pr.visual_crossing_high_f, pro.visual_crossing_high_f) as visual_crossing_high_f,
+  coalesce(mr.model_high_f, mro.model_high_f) as model_high_f
 from base_rows b
 left join actuals_official ao on ao.market_id = b.market_id and ao.summary_date = b.summary_date
 left join provider_rollups pr on pr.market_id = b.market_id and pr.summary_date = b.summary_date
+left join provider_rollups_old pro on pro.market_id = b.market_id and pro.summary_date = b.summary_date
 left join model_rollups mr on mr.market_id = b.market_id and mr.forecast_date = b.summary_date
+left join model_rollups_old mro on mro.market_id = b.market_id and mro.forecast_date = b.summary_date
 order by b.location asc, b.summary_date desc;
 `;
 
