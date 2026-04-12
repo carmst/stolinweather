@@ -142,7 +142,7 @@
 <!-- Live Ticker Section -->
 <div class="relative z-20 -mt-10 mb-20 overflow-hidden">
 <div class="flex whitespace-nowrap gap-8 py-6 glass-panel border-y border-white/5">
-<div class="flex items-center gap-8 animate-marquee">
+<div class="flex items-center gap-8 animate-marquee" id="landing-market-ticker">
 <div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
 <span class="font-label text-[10px] text-on-surface-variant uppercase tracking-widest">NYC RAIN &gt; 0.5"</span>
 <span class="font-label text-sm font-bold text-primary">68% PROB.</span>
@@ -278,6 +278,7 @@
 </div>
 </div>
 </footer>
+<script src="/landing-ticker.js" defer></script>
 <style>
         @keyframes marquee {
             0% { transform: translateX(0); }
