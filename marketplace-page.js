@@ -13,6 +13,36 @@ function formatUpdatedAt(value) {
   })}`;
 }
 
+let marketplaceDayFilter = "today";
+
+function dateKeyFromValue(value) {
+  if (!value) return null;
+  return String(value).slice(0, 10);
+}
+
+function addDays(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function marketplaceDateKeys(contracts) {
+  const dates = [...new Set(contracts.map((row) => dateKeyFromValue(row.eventDate)).filter(Boolean))].sort();
+  const today = dates[0] || new Date().toISOString().slice(0, 10);
+  return {
+    today,
+    tomorrow: addDays(today, 1),
+  };
+}
+
+function dayFilterButton(label, filterName) {
+  const active = marketplaceDayFilter === filterName;
+  const activeClass = "bg-primary text-on-primary-container rounded-lg font-bold";
+  const inactiveClass = "text-on-surface-variant hover:text-on-surface transition-colors";
+  return `<button class="px-4 py-2 text-xs font-label uppercase tracking-widest ${active ? activeClass : inactiveClass}" data-market-day="${filterName}">${label}</button>`;
+}
+
 function getTemperatureTheme(row) {
   const text = `${row.contract || ""} ${row.contractSubtitle || ""} ${row.eventType || ""}`.toLowerCase();
   const isLowMarket = text.includes("low") || text.includes("temperature_low");
@@ -92,8 +122,12 @@ function renderMiniBars(row, theme) {
 function formatActionLabel(row) {
   const side = (row.recommendedSide || "").toUpperCase();
   if (side === "YES") return "EXECUTE YES";
-  if (side === "NO") return "EXECUTE NO";
-  return "OPEN CONTRACT";
+  return "INSPECT YES";
+}
+
+function buildDetailUrl(row) {
+  const identifier = row.ticker || row.eventTicker || row.marketId || "";
+  return `/market-detail.html?ticker=${encodeURIComponent(identifier)}`;
 }
 
 function buildSignalSummary(row) {
@@ -101,6 +135,14 @@ function buildSignalSummary(row) {
 
   if (row.signalDriver) {
     pieces.push(row.signalDriver);
+  }
+
+  if (
+    typeof row.hourlyPathViolationHours === "number" &&
+    typeof row.hourlyPathHours === "number" &&
+    row.hourlyPathViolationHours > 0
+  ) {
+    pieces.push(`${row.hourlyPathViolationHours}/${row.hourlyPathHours} forecast hours violate the YES bucket`);
   }
 
   if (typeof row.adjustedForecastMaxF === "number" && typeof row.noaaForecastMaxF === "number") {
@@ -158,65 +200,18 @@ function buildContractCard(row) {
           ${renderMiniBars(row, theme)}
         </div>
         <p class="text-sm leading-relaxed text-on-surface-variant">${buildSignalSummary(row)}</p>
-        <a class="w-full py-4 rounded-2xl font-headline font-extrabold tracking-tight transition-transform active:scale-[0.98] mt-auto text-center ${actionClass}" href="${row.inspectUrl}" target="_blank" rel="noreferrer">
+        ${
+          wantsYes
+            ? ""
+            : `<p class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">No YES edge from the current model.</p>`
+        }
+        <div class="flex items-center justify-between text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">
+          <a class="hover:text-primary transition-colors" href="${buildDetailUrl(row)}">Forecast detail</a>
+          <a class="hover:text-secondary transition-colors" href="${row.inspectUrl}" target="_blank" rel="noreferrer">Kalshi</a>
+        </div>
+        <a class="w-full py-4 rounded-2xl font-headline font-extrabold tracking-tight transition-transform active:scale-[0.98] mt-auto text-center ${actionClass}" href="${buildDetailUrl(row)}">
           ${actionLabel}
         </a>
-      </div>
-    </div>
-  `;
-}
-
-function buildFeaturedCard(row) {
-  const theme = getTemperatureTheme(row);
-  return `
-    <div class="glass-card rounded-3xl md:col-span-2 overflow-hidden flex flex-col lg:flex-row relative">
-      <div class="lg:w-1/2 p-8 lg:p-12 z-10 bg-slate-950/40 lg:backdrop-blur-none">
-        <div class="inline-block px-3 py-1 rounded-full ${theme.accentSoft} border ${theme.border} ${theme.accentText} text-[10px] font-label font-bold uppercase tracking-[0.2em] mb-6">Featured Setup</div>
-        <h2 class="text-4xl font-headline font-extrabold tracking-tighter mb-4 leading-tight">${row.location}: <span class="${theme.accentText} italic">${row.contract}</span></h2>
-        <p class="text-on-surface-variant text-base font-body mb-8 leading-relaxed">${buildSignalSummary(row)}</p>
-        <div class="grid grid-cols-2 gap-6 mb-8">
-          <div>
-            <div class="text-[0.6rem] font-label uppercase tracking-widest text-on-surface-variant mb-1">Model Forecast</div>
-            <div class="text-2xl font-headline font-bold">${row.modelForecastDisplay}</div>
-          </div>
-          <div>
-            <div class="text-[0.6rem] font-label uppercase tracking-widest text-on-surface-variant mb-1">Market Signal</div>
-            <div class="text-2xl font-headline font-bold ${theme.accentText}">${row.setupLabel}</div>
-          </div>
-          <div>
-            <div class="text-[0.6rem] font-label uppercase tracking-widest text-on-surface-variant mb-1">Kalshi Price</div>
-            <div class="text-2xl font-headline font-bold">${row.contractCostDisplay || "--"}</div>
-          </div>
-          <div>
-            <div class="text-[0.6rem] font-label uppercase tracking-widest text-on-surface-variant mb-1">Expected Value</div>
-            <div class="text-2xl font-headline font-bold ${theme.accentText}">${row.expectedValueDisplay}</div>
-          </div>
-        </div>
-        <a class="px-8 py-4 bg-white text-slate-950 font-headline font-extrabold tracking-tight rounded-2xl hover:bg-primary transition-all duration-300 inline-block" href="${row.inspectUrl}" target="_blank" rel="noreferrer">${formatActionLabel(row)}</a>
-      </div>
-      <div class="lg:w-1/2 relative min-h-[300px] ${theme.gradient}">
-        <div class="absolute inset-0 bg-gradient-to-r from-slate-950 via-transparent to-transparent lg:hidden"></div>
-        <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent"></div>
-        <div class="absolute inset-0 p-8 flex flex-col justify-between">
-          <div class="self-end bg-slate-900/80 backdrop-blur p-3 rounded-xl border border-white/5 flex items-center gap-3">
-            <div class="w-2 h-2 rounded-full ${theme.accentBg} animate-pulse"></div>
-            <span class="text-xs font-label uppercase tracking-widest font-bold">Live Model Tracking</span>
-          </div>
-          <div class="space-y-4">
-            <div class="text-6xl font-black ${theme.accentText}">${row.location}</div>
-            <div class="grid grid-cols-2 gap-3">
-              <div class="bg-slate-900/70 rounded-2xl p-4">
-                <div class="text-[0.6rem] uppercase tracking-widest text-slate-400 mb-2">NOAA</div>
-                <div class="text-2xl font-bold">${typeof row.noaaForecastMaxF === "number" ? `${Math.round(row.noaaForecastMaxF)}F` : "--"}</div>
-              </div>
-              <div class="bg-slate-900/70 rounded-2xl p-4">
-                <div class="text-[0.6rem] uppercase tracking-widest text-slate-400 mb-2">Confidence</div>
-                <div class="text-2xl font-bold">${row.confidenceLabel}</div>
-              </div>
-            </div>
-            ${renderMiniBars(row, theme)}
-          </div>
-        </div>
       </div>
     </div>
   `;
@@ -229,16 +224,17 @@ async function loadMarketplace() {
   const response = await fetch("/api/dashboard");
   const dashboard = await response.json();
   const contracts = dashboard.contractViews?.allContracts || dashboard.contracts || [];
+  const dateKeys = marketplaceDateKeys(contracts);
+  const activeDateKey = marketplaceDayFilter === "tomorrow" ? dateKeys.tomorrow : dateKeys.today;
   const search = document.querySelector("#marketplace-search");
   const query = (search?.value || "").trim().toLowerCase();
   const filtered = contracts.filter((row) => {
+    if (activeDateKey && dateKeyFromValue(row.eventDate) !== activeDateKey) return false;
     if (!query) return true;
     return `${row.location} ${row.contract} ${row.contractSubtitle || ""}`.toLowerCase().includes(query);
   });
 
-  const featured = filtered.find((row) => row.setupLabel === "BEST") || filtered[0];
-  const topCards = filtered.slice(0, 3);
-  const summaryCards = (dashboard.metrics || []).slice(0, 3);
+  const activeDayLabel = marketplaceDayFilter === "tomorrow" ? "Tomorrow" : "Today";
 
   root.innerHTML = `
     <div class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
@@ -248,51 +244,29 @@ async function loadMarketplace() {
       </div>
       <div class="flex flex-wrap gap-3">
         <div class="bg-surface-container-high rounded-xl p-1 flex gap-1">
-          <button class="px-4 py-2 text-xs font-label uppercase tracking-widest bg-primary text-on-primary-container rounded-lg font-bold">Live</button>
-          <a class="px-4 py-2 text-xs font-label uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-colors" href="/history.html">History</a>
+          ${dayFilterButton("Today", "today")}
+          ${dayFilterButton("Tomorrow", "tomorrow")}
         </div>
         <div class="bg-surface-container-high rounded-xl p-1 flex gap-1">
-          <button class="px-4 py-2 text-xs font-label uppercase tracking-widest text-on-surface rounded-lg bg-surface-variant">North America</button>
+          <a class="px-4 py-2 text-xs font-label uppercase tracking-widest text-on-surface rounded-lg bg-surface-variant hover:text-primary transition-colors" href="/history.html">History</a>
         </div>
       </div>
     </div>
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-      ${summaryCards
-        .map(
-          (metric) => `
-            <div class="surface-container-high rounded-3xl p-6 border border-white/5">
-              <div class="text-[0.65rem] font-label uppercase tracking-widest text-on-surface-variant mb-2">${metric.eyebrow}</div>
-              <div class="text-4xl font-headline font-black ${metric.valueClass || ""}">${metric.value}</div>
-              <div class="text-sm text-on-surface-variant mt-3">${metric.subtle}</div>
-            </div>
-          `
-        )
-        .join("")}
+    <div class="mb-6 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+      <div>
+        <div class="text-[0.65rem] font-label uppercase tracking-[0.2em] text-on-surface-variant">${activeDayLabel} Contracts</div>
+        <div class="text-2xl font-headline font-extrabold">${filtered.length} available</div>
+      </div>
+      <div class="text-xs font-label uppercase tracking-widest text-on-surface-variant">
+        ${activeDateKey || "Date pending"} · ${contracts.length} total loaded
+      </div>
     </div>
     <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
-      ${topCards.map((row) => buildContractCard(row)).join("")}
-      ${featured ? buildFeaturedCard(featured) : ""}
-      <div class="surface-container-high rounded-3xl p-8 flex flex-col justify-center border border-white/5">
-        <div class="mb-6">
-          <span class="material-symbols-outlined text-primary text-5xl mb-4">analytics</span>
-          <h3 class="text-2xl font-headline font-extrabold tracking-tight">Desk Snapshot</h3>
-        </div>
-        <div class="space-y-6">
-          <div class="flex justify-between items-center p-4 bg-surface-variant/30 rounded-2xl">
-            <span class="text-xs font-label uppercase text-on-surface-variant tracking-widest">Tracked Contracts</span>
-            <span class="font-headline font-bold text-xl">${contracts.length}</span>
-          </div>
-          <div class="flex justify-between items-center p-4 bg-surface-variant/30 rounded-2xl">
-            <span class="text-xs font-label uppercase text-on-surface-variant tracking-widest">High Confidence</span>
-            <span class="font-headline font-bold text-xl text-primary">${contracts.filter((row) => row.confidenceLabel === "STRONG").length}</span>
-          </div>
-          <div class="flex justify-between items-center p-4 bg-surface-variant/30 rounded-2xl">
-            <span class="text-xs font-label uppercase text-on-surface-variant tracking-widest">Positive EV</span>
-            <span class="font-headline font-bold text-xl text-secondary">${contracts.filter((row) => typeof row.expectedValue === "number" && row.expectedValue > 0).length}</span>
-          </div>
-        </div>
-      </div>
-      ${filtered.slice(3, 9).map((row) => buildContractCard(row)).join("")}
+      ${
+        filtered.length
+          ? filtered.map((row) => buildContractCard(row)).join("")
+          : `<div class="surface-container-high rounded-3xl p-8 border border-white/5 text-on-surface-variant md:col-span-2 xl:col-span-3">No contracts match the current filters.</div>`
+      }
     </div>
   `;
 
@@ -301,6 +275,12 @@ async function loadMarketplace() {
     nextSearch.value = query;
     nextSearch.addEventListener("input", loadMarketplace, { once: true });
   }
+  document.querySelectorAll("[data-market-day]").forEach((button) => {
+    button.addEventListener("click", () => {
+      marketplaceDayFilter = button.dataset.marketDay || "today";
+      loadMarketplace();
+    });
+  });
 }
 
 loadMarketplace().catch((error) => {

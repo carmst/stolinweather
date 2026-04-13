@@ -1,7 +1,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
-const { buildDashboard, buildHistoryView } = require("./data");
+const { buildDashboard, buildHistoryView, buildMarketDetailView } = require("./data");
 
 const port = process.env.PORT || 4181;
 const root = __dirname;
@@ -53,6 +53,21 @@ const server = http.createServer(async (request, response) => {
   if (url.pathname === "/api/watchlist") {
     const { buildWatchlistView } = require("./data");
     sendJson(response, 200, await buildWatchlistView());
+    return;
+  }
+
+  if (url.pathname === "/api/market-detail") {
+    const dayCount = Number.parseInt(url.searchParams.get("days") || "5", 10);
+    sendJson(response, 200, await buildMarketDetailView({
+      ticker: url.searchParams.get("ticker"),
+      days: Number.isNaN(dayCount) ? 5 : Math.min(Math.max(dayCount, 3), 14),
+    }));
+    return;
+  }
+
+  if (url.pathname === "/api/auth-config") {
+    const authConfigHandler = require("./api/auth-config");
+    await authConfigHandler(request, response);
     return;
   }
 

@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>STOLIN WEATHER | Market Detail</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;600;700;800&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet" />
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#6debfd",
+              secondary: "#ff7348",
+              background: "#070f12",
+              surface: "#070f12",
+              "surface-container": "#111b1f",
+              "surface-container-high": "#172125",
+              "surface-variant": "#1c272c",
+              "on-surface": "#f0f8fc",
+              "on-surface-variant": "#a4acb0",
+              outline: "#6e777a",
+              "outline-variant": "#41494d",
+              "on-primary-container": "#00272c",
+              "primary-container": "#18b1c1",
+            },
+            fontFamily: {
+              headline: ["Manrope"],
+              body: ["Manrope"],
+              label: ["Inter"],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .material-symbols-outlined {
+        font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+      }
+      .glass-panel {
+        background: rgba(28, 39, 44, 0.4);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+      }
+      .detail-gradient {
+        background:
+          radial-gradient(circle at 15% 10%, rgba(109, 235, 253, 0.12), transparent 30%),
+          radial-gradient(circle at 85% 20%, rgba(255, 115, 72, 0.09), transparent 28%),
+          #070f12;
+      }
+    </style>
+  </head>
+  <body class="bg-background text-on-surface font-body detail-gradient min-h-screen">
+    <header class="fixed top-0 w-full z-50 bg-slate-950/70 backdrop-blur-xl shadow-2xl shadow-cyan-900/10">
+      <nav class="flex justify-between items-center px-8 py-4 max-w-[1920px] mx-auto">
+        <div class="flex items-center gap-12">
+          <a class="text-2xl font-black text-cyan-400 italic tracking-tighter font-headline uppercase" href="/">STOLIN WEATHER</a>
+          <div class="hidden md:flex items-center gap-8 font-headline font-bold tracking-tight">
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/">Landing</a>
+            <a class="text-cyan-400 border-b-2 border-cyan-400 pb-1" href="/marketplace.html">Marketplace</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/watchlist.html">Watchlist</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/history.html">History</a>
+          </div>
+        </div>
+        <a class="hover:bg-white/5 rounded-lg transition-all duration-300 p-2 text-slate-400" href="/profile.html" aria-label="Profile">
+          <span class="material-symbols-outlined">account_circle</span>
+        </a>
+      </nav>
+    </header>
+    <main class="pt-28 pb-20 px-8 max-w-[1500px] mx-auto" id="market-detail-root"></main>
+    <script src="/market-detail-page.js" defer></script>
+  </body>
+</html>

@@ -1468,6 +1468,131 @@ function rankDisplayedContracts(contracts) {
   );
 }
 
+function modelHighMatchDistance(contract) {
+  const rawForecast =
+    typeof contract.adjustedForecastMaxF === "number"
+      ? Number(contract.adjustedForecastMaxF.toFixed(1))
+      : null;
+  const forecast = rawForecast == null ? null : Math.floor(rawForecast);
+  if (forecast == null) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  if (contract.strikeType === "between" && contract.floorStrike != null && contract.capStrike != null) {
+    const low = Number(contract.floorStrike);
+    const high = Number(contract.capStrike);
+    if (forecast >= low && forecast <= high) {
+      return 0;
+    }
+    return Math.min(Math.abs(forecast - low), Math.abs(forecast - high));
+  }
+
+  if (contract.strikeType === "less" && contract.capStrike != null) {
+    const cap = Number(contract.capStrike);
+    return forecast < cap ? 0 : Math.abs(forecast - cap);
+  }
+
+  if (contract.strikeType === "greater" && contract.floorStrike != null) {
+    const floor = Number(contract.floorStrike);
+    return forecast > floor ? 0 : Math.abs(forecast - floor);
+  }
+
+  return Number.POSITIVE_INFINITY;
+}
+
+function modelHighMatchKindScore(contract) {
+  if (contract.strikeType === "between") {
+    return 3;
+  }
+  if (contract.strikeType === "less" || contract.strikeType === "greater") {
+    return 2;
+  }
+  return 1;
+}
+
+function modelHighSettlementBand(contract) {
+  if (contract.strikeType === "between" && contract.floorStrike != null && contract.capStrike != null) {
+    return `${Number(contract.floorStrike).toFixed(0)}-${Number(contract.capStrike).toFixed(0)}F floor bucket`;
+  }
+  if (contract.strikeType === "less" && contract.capStrike != null) {
+    return `<${Number(contract.capStrike).toFixed(0)}F floor bucket`;
+  }
+  if (contract.strikeType === "greater" && contract.floorStrike != null) {
+    return `>${Number(contract.floorStrike).toFixed(0)}F floor bucket`;
+  }
+  return null;
+}
+
+function selectModelHighMatchPerCity(contracts) {
+  const bestByCity = new Map();
+
+  for (const contract of contracts) {
+    const city = contract.location || "Unknown";
+    const matchDistance = modelHighMatchDistance(contract);
+    const candidate = {
+      ...contract,
+      modelHighMatchDistance: Number.isFinite(matchDistance) ? matchDistance : null,
+      modelHighF:
+        typeof contract.adjustedForecastMaxF === "number"
+          ? Number(contract.adjustedForecastMaxF.toFixed(1))
+          : null,
+      modelHighFlooredF:
+        typeof contract.adjustedForecastMaxF === "number"
+          ? Math.floor(Number(contract.adjustedForecastMaxF.toFixed(1)))
+          : null,
+      modelHighSettlementBand: modelHighSettlementBand(contract),
+    };
+    const existing = bestByCity.get(city);
+    if (!existing) {
+      bestByCity.set(city, candidate);
+      continue;
+    }
+
+    const existingDistance =
+      typeof existing.modelHighMatchDistance === "number" ? existing.modelHighMatchDistance : Number.POSITIVE_INFINITY;
+    const candidateDistance =
+      typeof candidate.modelHighMatchDistance === "number" ? candidate.modelHighMatchDistance : Number.POSITIVE_INFINITY;
+
+    if (candidateDistance < existingDistance) {
+      bestByCity.set(city, candidate);
+      continue;
+    }
+    if (candidateDistance > existingDistance) {
+      continue;
+    }
+
+    const candidateKindScore = modelHighMatchKindScore(candidate);
+    const existingKindScore = modelHighMatchKindScore(existing);
+    if (candidateKindScore > existingKindScore) {
+      bestByCity.set(city, candidate);
+      continue;
+    }
+    if (candidateKindScore < existingKindScore) {
+      continue;
+    }
+
+    const candidateDateTime = Date.parse(candidate.eventDate || "");
+    const existingDateTime = Date.parse(existing.eventDate || "");
+    if (Number.isFinite(candidateDateTime) && Number.isFinite(existingDateTime)) {
+      if (candidateDateTime < existingDateTime) {
+        bestByCity.set(city, candidate);
+        continue;
+      }
+      if (candidateDateTime > existingDateTime) {
+        continue;
+      }
+    }
+
+    const candidateEv = typeof candidate.expectedValue === "number" ? candidate.expectedValue : -Infinity;
+    const existingEv = typeof existing.expectedValue === "number" ? existing.expectedValue : -Infinity;
+    if (candidateEv > existingEv) {
+      bestByCity.set(city, candidate);
+    }
+  }
+
+  return [...bestByCity.values()].sort((left, right) => String(left.location).localeCompare(String(right.location)));
+}
+
 function sortContracts(contracts) {
   return [...contracts].sort(
     (left, right) => (right.displayRankScore ?? -Infinity) - (left.displayRankScore ?? -Infinity)
@@ -1485,43 +1610,19 @@ function pickContractCost(market) {
   return candidates.find((value) => typeof value === "number" && !Number.isNaN(value)) ?? null;
 }
 
-function pickSideAwarePricing(market, modelProb) {
-  const recommendedSide = modelProb >= 0.5 ? "yes" : "no";
-
-  if (recommendedSide === "yes") {
-    const costCandidates = [
-      market.yes_ask_dollars,
-      market.last_price_dollars,
-      market.yes_bid_dollars,
-      market.implied_probability,
-    ];
-    const contractCost =
-      costCandidates.find((value) => typeof value === "number" && !Number.isNaN(value)) ?? null;
-    const winProb = modelProb;
-    return {
-      recommendedSide,
-      contractCost,
-      winProb,
-    };
-  }
-
-  const inferredNoFromLast =
-    typeof market.last_price_dollars === "number" ? 1 - market.last_price_dollars : null;
-  const inferredNoFromImplied =
-    typeof market.implied_probability === "number" ? 1 - market.implied_probability : null;
+function pickYesPricing(market, modelProb) {
   const costCandidates = [
-    market.no_ask_dollars,
-    inferredNoFromLast,
-    market.no_bid_dollars,
-    inferredNoFromImplied,
+    market.yes_ask_dollars,
+    market.last_price_dollars,
+    market.yes_bid_dollars,
+    market.implied_probability,
   ];
   const contractCost =
     costCandidates.find((value) => typeof value === "number" && !Number.isNaN(value)) ?? null;
-  const winProb = 1 - modelProb;
   return {
-    recommendedSide,
+    recommendedSide: contractCost != null && modelProb > contractCost ? "yes" : "pass",
     contractCost,
-    winProb,
+    winProb: modelProb,
   };
 }
 
@@ -1607,14 +1708,19 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     ticker: market.ticker || null,
     eventTicker: market.event_ticker || null,
     seriesTicker: market.series_ticker || null,
+    marketId: market.weather_market_id || market.market_id || null,
     contract: cleanKalshiContractLabel(market),
     contractSubtitle: formatEventDateLabel(eventDate),
     location: market.cityLabel || extractCityLabel(market),
     eventType: market.market_type || "binary",
     threshold: market.functional_strike || market.floor_strike || market.cap_strike || "",
+    strikeType: market.strike_type || null,
+    floorStrike: typeof market.floor_strike === "number" ? market.floor_strike : null,
+    capStrike: typeof market.cap_strike === "number" ? market.cap_strike : null,
     eventDate,
     kalshiProb: typeof market.implied_probability === "number" ? market.implied_probability : 0,
     modelProb,
+    rawModelProb: typeof market.raw_model_probability === "number" ? market.raw_model_probability : null,
     winProbability: pricing.winProb,
     adjustedForecastMaxF: typeof market.adjusted_forecast_max_f === "number" ? market.adjusted_forecast_max_f : null,
     backendCitySelectionScore:
@@ -1623,7 +1729,12 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     leadHours: 0,
     closeTimeUtc: market.close_time || "",
     confidence: confidenceScore,
+    forecastMaxF: typeof market.forecast_max_f === "number" ? market.forecast_max_f : null,
     noaaForecastMaxF: typeof market.noaa_forecast_max_f === "number" ? market.noaa_forecast_max_f : null,
+    openMeteoForecastMaxF:
+      typeof market.open_meteo_forecast_max_f === "number" ? market.open_meteo_forecast_max_f : null,
+    visualCrossingForecastMaxF:
+      typeof market.visual_crossing_forecast_max_f === "number" ? market.visual_crossing_forecast_max_f : null,
     kalshiProbDisplay: formatPct(typeof market.implied_probability === "number" ? market.implied_probability : 0),
     modelForecastDisplay: formatModelForecast(market),
     modelProbDisplay: formatPct(modelProb),
@@ -1633,7 +1744,7 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     recommendedSide: pricing.recommendedSide,
     contractCost,
     isTradable,
-    contractCostDisplay: `${pricing.recommendedSide.toUpperCase()} ${formatCurrency(contractCost)}`,
+    contractCostDisplay: `YES ${formatCurrency(contractCost)}`,
     expectedValue,
     expectedValueDisplay:
       expectedValue == null ? "--" : `${expectedValue >= 0 ? "+" : "-"}${formatCurrency(Math.abs(expectedValue))}`,
@@ -1657,6 +1768,14 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
     volume: market.volume,
     status: market.status,
     marketSource,
+    hourlyPathPressure: market.hourly_path_pressure || null,
+    hourlyPathPressureScore:
+      typeof market.hourly_path_pressure_score === "number" ? market.hourly_path_pressure_score : null,
+    hourlyPathViolationHours:
+      typeof market.hourly_path_violation_hours === "number" ? market.hourly_path_violation_hours : null,
+    hourlyPathHours: typeof market.hourly_path_hours === "number" ? market.hourly_path_hours : null,
+    hourlyPathDistancePressureF:
+      typeof market.hourly_path_distance_pressure_f === "number" ? market.hourly_path_distance_pressure_f : null,
   };
 }
 
@@ -1666,8 +1785,7 @@ function formatModelForecast(market) {
   const sigma = market.forecast_sigma_f;
 
   if (typeof adjustedForecast === "number") {
-    const sigmaLabel = typeof sigma === "number" ? ` +/- ${sigma.toFixed(1)}F` : "";
-    return `${adjustedForecast.toFixed(1)}F high${sigmaLabel}`;
+    return `${adjustedForecast.toFixed(1)}F high`;
   }
 
   if (typeof noaaForecast === "number") {
@@ -1913,7 +2031,7 @@ function normalizeScoredContracts(markets) {
       ? market.model_probability
       : Math.min(0.95, Math.max(0.05, kalshiProb + 0.06));
     const edge = typeof market.edge === "number" ? market.edge : modelProb - kalshiProb;
-    const pricing = pickSideAwarePricing(market, modelProb);
+    const pricing = pickYesPricing(market, modelProb);
     const confidenceScore = Math.min(0.9, Math.max(0.42, 0.5 + Math.abs(edge) * 2.5));
     const contractCost = pricing.contractCost;
     const expectedValue = contractCost == null ? null : pricing.winProb - contractCost;
@@ -1964,7 +2082,7 @@ function normalizeKalshiContracts(markets) {
     const kalshiProb = typeof market.implied_probability === "number" ? market.implied_probability : 0;
     const syntheticModelProb = Math.min(0.95, Math.max(0.05, kalshiProb + 0.06));
     const edge = syntheticModelProb - kalshiProb;
-    const pricing = pickSideAwarePricing(market, syntheticModelProb);
+    const pricing = pickYesPricing(market, syntheticModelProb);
     const confidenceScore = Math.min(0.85, Math.max(0.38, 0.45 + Math.abs(edge) * 2));
     const contractCost = pricing.contractCost;
     const expectedValue = contractCost == null ? null : pricing.winProb - contractCost;
@@ -2134,27 +2252,21 @@ async function buildDashboard() {
 async function buildWatchlistView() {
   const dashboard = await buildDashboard();
   const watchlist = loadManualWatchlist();
-  const locationSet = new Set((watchlist.locations || []).map((value) => String(value).toLowerCase()));
-  const tickerSet = new Set((watchlist.tickers || []).map((value) => String(value).toUpperCase()));
   const allContracts = dashboard.contractViews?.allContracts || dashboard.contracts || [];
-  const curated = allContracts.filter((contract) => {
-    const location = String(contract.location || "").toLowerCase();
-    const ticker = String(contract.ticker || contract.inspectUrl || "").toUpperCase();
-    return locationSet.has(location) || tickerSet.has(ticker);
-  });
+  const modelHighMatches = selectModelHighMatchPerCity(allContracts);
 
   return {
     updatedAt: dashboard.updatedAt,
     dataBackend: dashboard.dataBackend,
     dataBackendReason: dashboard.dataBackendReason,
     watchlist,
-    rows: curated,
+    rows: modelHighMatches,
     stats: {
-      total: curated.length,
-      activeSignals: curated.filter((row) => row.setupLabel === "BEST" || row.setupLabel === "PLAYABLE").length,
+      total: modelHighMatches.length,
+      activeSignals: modelHighMatches.filter((row) => row.setupLabel === "BEST" || row.setupLabel === "PLAYABLE").length,
       avgConfidence:
-        curated.length > 0
-          ? Math.round((curated.reduce((sum, row) => sum + (row.confidence || 0), 0) / curated.length) * 100)
+        modelHighMatches.length > 0
+          ? Math.round((modelHighMatches.reduce((sum, row) => sum + (row.confidence || 0), 0) / modelHighMatches.length) * 100)
           : 0,
     },
   };
@@ -2173,8 +2285,243 @@ async function buildHistoryView(dayCount = 5) {
   };
 }
 
+function pickMarketDetailSelection(ticker) {
+  const modelPayload = loadModelPayload();
+  const markets = Array.isArray(modelPayload?.markets) ? modelPayload.markets : [];
+  const lookup = String(ticker || "").toUpperCase();
+  return markets.find((market) => {
+    const candidates = [
+      market.ticker,
+      market.event_ticker,
+      market.weather_market_id,
+      market.market_id,
+    ].filter(Boolean);
+    return candidates.some((candidate) => String(candidate).toUpperCase() === lookup);
+  }) || markets[0] || null;
+}
+
+function dateKeyFromValue(value) {
+  if (!value) {
+    return null;
+  }
+  return String(value).slice(0, 10);
+}
+
+function normalizedContractToMarketSelection(contract) {
+  if (!contract) {
+    return null;
+  }
+
+  return {
+    ticker: contract.ticker,
+    event_ticker: contract.eventTicker,
+    series_ticker: contract.seriesTicker,
+    title: `${contract.location}: ${contract.contract}`,
+    subtitle: contract.contract,
+    matched_location: contract.location,
+    forecast_date: dateKeyFromValue(contract.eventDate),
+    weather_market_id: contract.marketId,
+    strike_type: contract.strikeType,
+    floor_strike: contract.floorStrike,
+    cap_strike: contract.capStrike,
+    adjusted_forecast_max_f: contract.adjustedForecastMaxF,
+    forecast_max_f: contract.forecastMaxF,
+    noaa_forecast_max_f: contract.noaaForecastMaxF,
+    open_meteo_forecast_max_f: contract.openMeteoForecastMaxF,
+    visual_crossing_forecast_max_f: contract.visualCrossingForecastMaxF,
+    model_probability: contract.modelProb,
+    raw_model_probability: contract.rawModelProb,
+    implied_probability: contract.kalshiProb,
+    model_expected_value: contract.expectedValue,
+    hourly_path_violation_hours: contract.hourlyPathViolationHours,
+    hourly_path_hours: contract.hourlyPathHours,
+    eventTicker: contract.eventTicker,
+    seriesTicker: contract.seriesTicker,
+  };
+}
+
+async function pickMarketDetailSelectionFromDashboard(ticker) {
+  const dashboard = await buildDashboard();
+  const contracts = dashboard.contractViews?.allContracts || dashboard.contracts || [];
+  const lookup = String(ticker || "").toUpperCase();
+  const contract = contracts.find((row) => {
+    const candidates = [
+      row.ticker,
+      row.eventTicker,
+      row.marketId,
+      row.inspectUrl,
+    ].filter(Boolean);
+    return candidates.some((candidate) => String(candidate).toUpperCase() === lookup);
+  }) || contracts[0] || null;
+
+  return normalizedContractToMarketSelection(contract);
+}
+
+function readModelSnapshotPoints({ ticker, forecastDate }) {
+  const points = [];
+  const entries = fs.existsSync(modelSnapshotsDir)
+    ? fs.readdirSync(modelSnapshotsDir).filter((entry) => entry.endsWith(".jsonl")).sort()
+    : [];
+
+  for (const entry of entries) {
+    for (const payload of loadJsonLines(path.join(modelSnapshotsDir, entry))) {
+      const pulledAt = payload.pulled_at;
+      for (const market of payload.markets || []) {
+        if (ticker && market.ticker !== ticker) {
+          continue;
+        }
+        if (forecastDate && market.forecast_date !== forecastDate) {
+          continue;
+        }
+        points.push({
+          pulledAt,
+          forecastDate: market.forecast_date,
+          modelHighF:
+            typeof market.adjusted_forecast_max_f === "number" ? market.adjusted_forecast_max_f : null,
+          forecastMaxF: typeof market.forecast_max_f === "number" ? market.forecast_max_f : null,
+          noaaHighF: typeof market.noaa_forecast_max_f === "number" ? market.noaa_forecast_max_f : null,
+          openMeteoHighF:
+            typeof market.open_meteo_forecast_max_f === "number" ? market.open_meteo_forecast_max_f : null,
+          visualCrossingHighF:
+            typeof market.visual_crossing_forecast_max_f === "number" ? market.visual_crossing_forecast_max_f : null,
+          modelProb: typeof market.model_probability === "number" ? market.model_probability : null,
+          rawModelProb: typeof market.raw_model_probability === "number" ? market.raw_model_probability : null,
+          kalshiProb: typeof market.implied_probability === "number" ? market.implied_probability : null,
+          expectedValue: typeof market.model_expected_value === "number" ? market.model_expected_value : null,
+          hourlyPathViolationHours:
+            typeof market.hourly_path_violation_hours === "number" ? market.hourly_path_violation_hours : null,
+          hourlyPathHours: typeof market.hourly_path_hours === "number" ? market.hourly_path_hours : null,
+        });
+      }
+    }
+  }
+
+  return points
+    .filter((point) => point.pulledAt)
+    .sort((left, right) => new Date(left.pulledAt) - new Date(right.pulledAt));
+}
+
+function readLatestHourlyProviderPaths({ marketId, forecastDate }) {
+  if (!marketId || !forecastDate || !fs.existsSync(weatherSnapshotsDir)) {
+    return [];
+  }
+
+  const latestByProvider = new Map();
+  const entries = fs.readdirSync(weatherSnapshotsDir).filter((entry) => entry.endsWith(".jsonl")).sort();
+
+  for (const entry of entries) {
+    for (const snapshot of loadJsonLines(path.join(weatherSnapshotsDir, entry))) {
+      if (snapshot.market?.market_id !== marketId || !snapshot.provider || !snapshot.pulled_at) {
+        continue;
+      }
+      const hourly = (snapshot.hourly || [])
+        .filter((row) => String(row.time || "").slice(0, 10) === forecastDate)
+        .map((row) => ({
+          time: row.time,
+          temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
+          shortForecast: row.short_forecast || row.conditions || "",
+        }))
+        .filter((row) => row.time && typeof row.temperatureF === "number");
+      if (!hourly.length) {
+        continue;
+      }
+
+      const existing = latestByProvider.get(snapshot.provider);
+      if (!existing || new Date(snapshot.pulled_at) > new Date(existing.pulledAt)) {
+        latestByProvider.set(snapshot.provider, {
+          provider: snapshot.provider,
+          pulledAt: snapshot.pulled_at,
+          hourly,
+        });
+      }
+    }
+  }
+
+  return [...latestByProvider.values()].sort((left, right) => left.provider.localeCompare(right.provider));
+}
+
+async function buildMarketDetailView({ ticker, days = 5 } = {}) {
+  let selection = pickMarketDetailSelection(ticker);
+  if (!selection) {
+    selection = await pickMarketDetailSelectionFromDashboard(ticker);
+  }
+  if (!selection) {
+    return {
+      updatedAt: new Date().toISOString(),
+      dataBackend: "static-json",
+      dataBackendReason: "No scored markets or dashboard contracts available",
+      market: null,
+      series: [],
+      hourlyProviders: [],
+      actual: null,
+    };
+  }
+
+  const forecastDate = selection.forecast_date;
+  const marketId = selection.weather_market_id;
+  const series = readModelSnapshotPoints({ ticker: selection.ticker, forecastDate });
+  if (!series.length) {
+    series.push({
+      pulledAt: selection.pulled_at || new Date().toISOString(),
+      forecastDate,
+      modelHighF:
+        typeof selection.adjusted_forecast_max_f === "number" ? selection.adjusted_forecast_max_f : null,
+      forecastMaxF: typeof selection.forecast_max_f === "number" ? selection.forecast_max_f : null,
+      noaaHighF: typeof selection.noaa_forecast_max_f === "number" ? selection.noaa_forecast_max_f : null,
+      openMeteoHighF:
+        typeof selection.open_meteo_forecast_max_f === "number" ? selection.open_meteo_forecast_max_f : null,
+      visualCrossingHighF:
+        typeof selection.visual_crossing_forecast_max_f === "number" ? selection.visual_crossing_forecast_max_f : null,
+      modelProb: typeof selection.model_probability === "number" ? selection.model_probability : null,
+      rawModelProb: typeof selection.raw_model_probability === "number" ? selection.raw_model_probability : null,
+      kalshiProb: typeof selection.implied_probability === "number" ? selection.implied_probability : null,
+      expectedValue: typeof selection.model_expected_value === "number" ? selection.model_expected_value : null,
+      hourlyPathViolationHours:
+        typeof selection.hourly_path_violation_hours === "number" ? selection.hourly_path_violation_hours : null,
+      hourlyPathHours: typeof selection.hourly_path_hours === "number" ? selection.hourly_path_hours : null,
+    });
+  }
+  const history = await buildHistoryView(days);
+  const actual =
+    history.rows.find((row) => row.marketId === marketId && row.date === forecastDate) ||
+    null;
+
+  return {
+    updatedAt: new Date().toISOString(),
+    dataBackend: history.dataBackend || "static-json",
+    dataBackendReason: history.dataBackendReason || null,
+    market: {
+      ticker: selection.ticker,
+      eventTicker: selection.event_ticker,
+      title: selection.title,
+      contract: selection.subtitle || selection.title,
+      location: selection.matched_location,
+      forecastDate,
+      marketId,
+      strikeType: selection.strike_type,
+      floorStrike: selection.floor_strike,
+      capStrike: selection.cap_strike,
+      kalshiUrl: buildKalshiUrl(selection),
+      latestModelHighF:
+        typeof selection.adjusted_forecast_max_f === "number" ? selection.adjusted_forecast_max_f : null,
+      latestModelProb:
+        typeof selection.model_probability === "number" ? selection.model_probability : null,
+      latestExpectedValue:
+        typeof selection.model_expected_value === "number" ? selection.model_expected_value : null,
+      hourlyPathViolationHours:
+        typeof selection.hourly_path_violation_hours === "number" ? selection.hourly_path_violation_hours : null,
+      hourlyPathHours:
+        typeof selection.hourly_path_hours === "number" ? selection.hourly_path_hours : null,
+    },
+    series,
+    hourlyProviders: readLatestHourlyProviderPaths({ marketId, forecastDate }),
+    actual,
+  };
+}
+
 module.exports = {
   buildDashboard,
   buildHistoryView,
+  buildMarketDetailView,
   buildWatchlistView,
 };
