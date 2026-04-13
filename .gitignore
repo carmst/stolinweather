@@ -11,3 +11,15 @@ node_modules/
 .vercel/
 output/*
 !output/.gitkeep
+!output/kalshi/
+!output/kalshi/latest_markets.json
+!output/models/
+!output/models/latest_scored_markets.json
+!output/history/
+!output/history/latest_noaa_history.json
+!output/preliminary/
+!output/preliminary/latest_preliminary_daily_highs.json
+!output/weather/
+!output/weather/latest_forecasts.json
+!output/weather/latest_forecasts_noaa.json
+!output/weather/latest_forecasts_visual_crossing.json
