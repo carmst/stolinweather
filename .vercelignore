@@ -8,11 +8,7 @@ __pycache__
 *.pyc
 
 # Local runtime state and archives
-output/weather/snapshots
-output/models/snapshots
-output/kalshi/snapshots
-output/history/snapshots
-output/preliminary/snapshots
+output/**
 output/cron_weather.log
 output/cron_daily.log
 
@@ -20,5 +16,12 @@ output/cron_daily.log
 db/seed_current_state.sql
 
 # Keep only tiny fallback artifacts if needed
+!output/
+!output/kalshi/
 !output/kalshi/latest_markets.json
+!output/models/
 !output/models/latest_scored_markets.json
+!output/history/
+!output/history/latest_noaa_history.json
+!output/preliminary/
+!output/preliminary/latest_preliminary_daily_highs.json

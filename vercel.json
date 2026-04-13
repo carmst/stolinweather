@@ -4,7 +4,16 @@
   "cleanUrls": true,
   "functions": {
     "api/dashboard.js": {
-      "includeFiles": "{output/kalshi/latest_markets.json,output/models/latest_scored_markets.json}"
+      "includeFiles": "{config/tracked_markets.json,config/watchlist.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json}"
+    },
+    "api/history.js": {
+      "includeFiles": "{config/tracked_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json,output/models/latest_scored_markets.json}"
+    },
+    "api/watchlist.js": {
+      "includeFiles": "{config/tracked_markets.json,config/watchlist.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json}"
+    },
+    "api/market-detail.js": {
+      "includeFiles": "{config/tracked_markets.json,config/watchlist.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json}"
     }
   }
 }
