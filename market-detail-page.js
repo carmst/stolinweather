@@ -26,6 +26,7 @@ function linePath(points, xFor, yFor) {
 function buildLineChart({ series, actualHighF, height = 340 }) {
   const width = 1000;
   const padding = { top: 28, right: 28, bottom: 42, left: 54 };
+  const hasProviderPoints = series.some((item) => item.points.length);
   const values = [];
   for (const item of series) {
     for (const point of item.points) {
@@ -33,6 +34,9 @@ function buildLineChart({ series, actualHighF, height = 340 }) {
     }
   }
   if (typeof actualHighF === "number") values.push(actualHighF);
+  if (!hasProviderPoints) {
+    return `<div class="h-80 rounded-3xl bg-surface-container-high flex items-center justify-center text-on-surface-variant">No provider hourly path returned for this market yet.</div>`;
+  }
   if (!values.length) {
     return `<div class="h-80 rounded-3xl bg-surface-container-high flex items-center justify-center text-on-surface-variant">No chart points available yet.</div>`;
   }

@@ -2413,25 +2413,67 @@ function readModelSnapshotPoints({ ticker, forecastDate }) {
     .sort((left, right) => new Date(left.pulledAt) - new Date(right.pulledAt));
 }
 
-function readLatestHourlyProviderPaths({ marketId, forecastDate }) {
-  if (!marketId || !forecastDate) {
+function normalizeLocationKey(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function snapshotMatchesMarket(snapshot, { marketId, location }) {
+  if (marketId && snapshot.market?.market_id === marketId) {
+    return true;
+  }
+
+  const targetLocation = normalizeLocationKey(location);
+  if (!targetLocation) {
+    return false;
+  }
+
+  const snapshotLocations = [
+    snapshot.market?.location,
+    snapshot.market?.city,
+    ...(Array.isArray(snapshot.market?.location_aliases) ? snapshot.market.location_aliases : []),
+  ];
+  return snapshotLocations.some((candidate) => normalizeLocationKey(candidate) === targetLocation);
+}
+
+function selectHourlyRowsForDate(hourlyRows, forecastDate) {
+  const mappedRows = (hourlyRows || [])
+    .map((row) => ({
+      sourceDate: String(row.time || "").slice(0, 10),
+      time: row.time,
+      temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
+      shortForecast: row.short_forecast || row.conditions || "",
+    }))
+    .filter((row) => row.time && typeof row.temperatureF === "number");
+
+  const exactRows = mappedRows.filter((row) => row.sourceDate === forecastDate);
+  if (exactRows.length) {
+    return exactRows;
+  }
+
+  const forecastTime = Date.parse(`${forecastDate}T00:00:00Z`);
+  const availableDates = [...new Set(mappedRows.map((row) => row.sourceDate).filter(Boolean))];
+  const nearestDate = availableDates
+    .map((dateKey) => ({ dateKey, distance: Math.abs(Date.parse(`${dateKey}T00:00:00Z`) - forecastTime) }))
+    .filter((entry) => Number.isFinite(entry.distance))
+    .sort((left, right) => left.distance - right.distance)[0]?.dateKey;
+
+  return nearestDate ? mappedRows.filter((row) => row.sourceDate === nearestDate) : [];
+}
+
+function readLatestHourlyProviderPaths({ marketId, location, forecastDate }) {
+  if ((!marketId && !location) || !forecastDate) {
     return [];
   }
 
   const latestByProvider = new Map();
 
   const addSnapshot = (snapshot) => {
-    if (snapshot.market?.market_id !== marketId || !snapshot.provider || !snapshot.pulled_at) {
+    if (!snapshotMatchesMarket(snapshot, { marketId, location }) || !snapshot.provider || !snapshot.pulled_at) {
       return;
     }
-    const hourly = (snapshot.hourly || [])
-      .filter((row) => String(row.time || "").slice(0, 10) === forecastDate)
-      .map((row) => ({
-        time: row.time,
-        temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
-        shortForecast: row.short_forecast || row.conditions || "",
-      }))
-      .filter((row) => row.time && typeof row.temperatureF === "number");
+    const hourly = selectHourlyRowsForDate(snapshot.hourly, forecastDate);
     if (!hourly.length) {
       return;
     }
@@ -2462,9 +2504,6 @@ function readLatestHourlyProviderPaths({ marketId, forecastDate }) {
     const entries = fs.readdirSync(weatherSnapshotsDir).filter((entry) => entry.endsWith(".jsonl")).sort();
     for (const entry of entries) {
       for (const snapshot of loadJsonLines(path.join(weatherSnapshotsDir, entry))) {
-      if (snapshot.market?.market_id !== marketId || !snapshot.provider || !snapshot.pulled_at) {
-        continue;
-      }
         addSnapshot(snapshot);
       }
     }
@@ -2547,7 +2586,11 @@ async function buildMarketDetailView({ ticker, days = 5 } = {}) {
         typeof selection.hourly_path_hours === "number" ? selection.hourly_path_hours : null,
     },
     series,
-    hourlyProviders: readLatestHourlyProviderPaths({ marketId, forecastDate }),
+    hourlyProviders: readLatestHourlyProviderPaths({
+      marketId,
+      location: selection.matched_location,
+      forecastDate,
+    }),
     actual,
   };
 }
