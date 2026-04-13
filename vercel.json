@@ -4,16 +4,16 @@
   "cleanUrls": true,
   "functions": {
     "api/dashboard.js": {
-      "includeFiles": "{config/*.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json,output/weather/latest_forecasts*.json}"
+      "includeFiles": "{config/*.json,deploy_data/**}"
     },
     "api/history.js": {
-      "includeFiles": "{config/*.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json,output/weather/latest_forecasts*.json}"
+      "includeFiles": "{config/*.json,deploy_data/**}"
     },
     "api/watchlist.js": {
-      "includeFiles": "{config/*.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json,output/weather/latest_forecasts*.json}"
+      "includeFiles": "{config/*.json,deploy_data/**}"
     },
     "api/market-detail.js": {
-      "includeFiles": "{config/*.json,output/kalshi/latest_markets.json,output/models/latest_scored_markets.json,output/history/latest_noaa_history.json,output/preliminary/latest_preliminary_daily_highs.json,output/weather/latest_forecasts*.json}"
+      "includeFiles": "{config/*.json,deploy_data/**}"
     }
   }
 }

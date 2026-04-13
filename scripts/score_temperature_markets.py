@@ -15,14 +15,18 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from load_json_to_postgres import DB_SCHEMA_PATH, resolve_connection, run_sql_file, sync_scored_payload
+from weather_feature_utils import build_combined_features, floor_checkpoint, is_morning_same_day_checkpoint, predict_residual, provider_prefix
 
 
 ROOT = Path(__file__).resolve().parents[1]
 KALSHI_PATH = ROOT / "output" / "kalshi" / "latest_markets.json"
 WEATHER_PATH = ROOT / "output" / "weather" / "latest_forecasts.json"
 NOAA_WEATHER_PATH = ROOT / "output" / "weather" / "latest_forecasts_noaa.json"
+VISUAL_CROSSING_WEATHER_PATH = ROOT / "output" / "weather" / "latest_forecasts_visual_crossing.json"
 CALIBRATION_PATH = ROOT / "output" / "models" / "temperature_calibration.json"
 FORECAST_ERROR_MODEL_PATH = ROOT / "output" / "models" / "forecast_error_model.json"
+HIGH_TEMP_RESIDUAL_MODEL_PATH = ROOT / "output" / "models" / "high_temp_residual_model.json"
+PRELIMINARY_HIGHS_PATH = ROOT / "output" / "preliminary" / "latest_preliminary_daily_highs.json"
 OUTPUT_DIR = ROOT / "output" / "models"
 LATEST_PATH = OUTPUT_DIR / "latest_scored_markets.json"
 SNAPSHOT_DIR = OUTPUT_DIR / "snapshots"
@@ -51,6 +55,25 @@ def load_forecast_error_model() -> dict[str, Any]:
     if FORECAST_ERROR_MODEL_PATH.exists():
         return load_json(FORECAST_ERROR_MODEL_PATH)
     return {"locations": {}}
+
+
+def load_high_temp_residual_model() -> dict[str, Any]:
+    if HIGH_TEMP_RESIDUAL_MODEL_PATH.exists():
+        return load_json(HIGH_TEMP_RESIDUAL_MODEL_PATH)
+    return {"active": False}
+
+
+def load_preliminary_highs() -> dict[tuple[str, str], dict[str, Any]]:
+    if not PRELIMINARY_HIGHS_PATH.exists():
+        return {}
+    payload = load_json(PRELIMINARY_HIGHS_PATH)
+    rows: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in payload.get("rows", []):
+        market_id = row.get("market_id")
+        forecast_date = row.get("forecast_date")
+        if market_id and forecast_date:
+            rows[(market_id, forecast_date)] = row
+    return rows
 
 
 def ensure_output_dirs() -> None:
@@ -105,11 +128,25 @@ def get_forecast_row(snapshot: dict[str, Any], target_date: str) -> dict[str, An
 def pick_primary_snapshot(
     noaa_snapshots: list[dict[str, Any]],
     open_meteo_snapshots: list[dict[str, Any]],
+    visual_crossing_snapshots: list[dict[str, Any]],
     series_key: str | None,
-) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
     noaa_snapshot = find_weather_snapshot(noaa_snapshots, series_key)
     open_meteo_snapshot = find_weather_snapshot(open_meteo_snapshots, series_key)
-    return (noaa_snapshot or open_meteo_snapshot), open_meteo_snapshot
+    visual_crossing_snapshot = find_weather_snapshot(visual_crossing_snapshots, series_key)
+    return (
+        noaa_snapshot or visual_crossing_snapshot or open_meteo_snapshot,
+        open_meteo_snapshot,
+        visual_crossing_snapshot,
+    )
+
+
+def median(values: list[float]) -> float:
+    ordered = sorted(values)
+    middle = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[middle]
+    return (ordered[middle - 1] + ordered[middle]) / 2.0
 
 
 def logistic(value: float) -> float:
@@ -136,6 +173,80 @@ def estimate_sigma(snapshot: dict[str, Any], daily_row: dict[str, Any]) -> float
     wind_component = min(2.0, wind / 20.0 + max(0.0, gust - wind) / 25.0)
     range_component = min(1.5, diurnal_range / 30.0)
     return base_sigma + wind_component + range_component
+
+
+def apply_source_spread_adjustment(sigma: float, source_values: list[float]) -> float:
+    if len(source_values) < 2:
+        return sigma
+    spread = max(source_values) - min(source_values)
+    return round(sigma + min(2.0, spread * 0.35), 2)
+
+
+def same_day_intraday_sigma(
+    *,
+    sigma: float,
+    snapshot: dict[str, Any],
+    forecast_date: str,
+    forecast_max: float,
+    source_values: list[float],
+    feature_row: dict[str, Any] | None,
+    preliminary_high: float | None,
+) -> tuple[float, str | None]:
+    pulled_at = datetime.fromisoformat(snapshot["pulled_at"].replace("Z", "+00:00"))
+    tz_name = snapshot.get("market", {}).get("timezone", "UTC")
+    local_pulled_at = pulled_at.astimezone(ZoneInfo(tz_name))
+    if local_pulled_at.date().isoformat() != forecast_date:
+        return sigma, None
+
+    local_hour = local_pulled_at.hour + (local_pulled_at.minute / 60.0)
+    if local_hour < 8:
+        return sigma, None
+
+    if local_hour >= 16:
+        live_sigma = 1.1
+    elif local_hour >= 14:
+        live_sigma = 1.35
+    elif local_hour >= 12:
+        live_sigma = 1.65
+    else:
+        live_sigma = 2.1
+
+    hours_to_peak = None
+    if feature_row:
+        raw_hours_to_peak = feature_row.get("blended_hours_to_forecast_high")
+        if isinstance(raw_hours_to_peak, (int, float)):
+            hours_to_peak = float(raw_hours_to_peak)
+            if hours_to_peak <= -2:
+                live_sigma = min(live_sigma, 0.95)
+            elif hours_to_peak <= 0:
+                live_sigma = min(live_sigma, 1.05)
+            elif hours_to_peak <= 2:
+                live_sigma = min(live_sigma, 1.2)
+            elif hours_to_peak <= 4:
+                live_sigma = min(live_sigma, 1.55)
+
+    if preliminary_high is not None:
+        remaining_to_forecast = forecast_max - preliminary_high
+        if remaining_to_forecast <= 0.5:
+            live_sigma = min(live_sigma, 0.95 if hours_to_peak is not None and hours_to_peak <= 1 else 1.1)
+        elif remaining_to_forecast <= 1.5 and hours_to_peak is not None and hours_to_peak <= 2:
+            live_sigma = min(live_sigma, 1.1)
+
+    spread = max(source_values) - min(source_values) if len(source_values) >= 2 else 0.0
+    live_sigma += min(0.6, spread * 0.12)
+    live_sigma = max(0.75, live_sigma)
+    tightened = round(min(sigma, live_sigma), 2)
+    if tightened == sigma:
+        return sigma, None
+
+    reason = f"intraday {local_hour:.1f}h"
+    if hours_to_peak is not None:
+        reason += f", {hours_to_peak:.1f}h to forecast high"
+    if preliminary_high is not None:
+        reason += f", prelim {preliminary_high:.1f}F"
+    if spread:
+        reason += f", provider spread {spread:.1f}F"
+    return tightened, reason
 
 
 def calibrated_sigma(
@@ -223,20 +334,241 @@ def climatology_adjusted_mean(
 
 
 def predict_probability(
-    *, strike_type: str | None, floor_strike: Any, cap_strike: Any, forecast_max: float, sigma: float
+    *,
+    strike_type: str | None,
+    floor_strike: Any,
+    cap_strike: Any,
+    forecast_max: float,
+    sigma: float,
+    observed_floor: float | None = None,
 ) -> float | None:
+    denominator = 1.0
+    if observed_floor is not None:
+        denominator = max(0.0001, 1.0 - normal_cdf(observed_floor, forecast_max, sigma))
+
+    # Kalshi high-temperature contracts are selected against integer high
+    # buckets. Use floor-style bins so 84.9F still belongs to the 83-84 bucket.
     if strike_type == "greater" and floor_strike is not None:
-        return 1.0 - normal_cdf(float(floor_strike), forecast_max, sigma)
+        lower = float(floor_strike) + 1.0
+        if observed_floor is not None and observed_floor >= lower:
+            return 1.0
+        return (1.0 - normal_cdf(lower, forecast_max, sigma)) / denominator
 
     if strike_type == "less" and cap_strike is not None:
-        return normal_cdf(float(cap_strike), forecast_max, sigma)
+        upper = float(cap_strike)
+        if observed_floor is not None:
+            if observed_floor >= upper:
+                return 0.0
+            return max(0.0, normal_cdf(upper, forecast_max, sigma) - normal_cdf(observed_floor, forecast_max, sigma)) / denominator
+        return normal_cdf(upper, forecast_max, sigma)
 
     if strike_type == "between" and floor_strike is not None and cap_strike is not None:
-        upper = normal_cdf(float(cap_strike), forecast_max, sigma)
-        lower = normal_cdf(float(floor_strike), forecast_max, sigma)
-        return max(0.0, upper - lower)
+        lower_bound = float(floor_strike)
+        upper_bound = float(cap_strike) + 1.0
+        if observed_floor is not None:
+            if observed_floor >= upper_bound:
+                return 0.0
+            lower_bound = max(lower_bound, observed_floor)
+        upper = normal_cdf(upper_bound, forecast_max, sigma)
+        lower = normal_cdf(lower_bound, forecast_max, sigma)
+        return max(0.0, upper - lower) / denominator
 
     return None
+
+
+def offsetless_open_meteo_is_utc(provider: str | None, forecast_timezone: str | None) -> bool:
+    return provider == "open-meteo" and (forecast_timezone or "UTC").upper() in {"UTC", "GMT"}
+
+
+def parse_hourly_time(
+    value: Any,
+    tz_name: str,
+    provider: str | None = None,
+    forecast_timezone: str | None = None,
+) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(
+            tzinfo=timezone.utc
+            if offsetless_open_meteo_is_utc(provider, forecast_timezone)
+            else ZoneInfo(tz_name)
+        )
+    return parsed.astimezone(ZoneInfo(tz_name))
+
+
+def contract_path_bounds(strike_type: str | None, floor_strike: Any, cap_strike: Any) -> tuple[float | None, float | None]:
+    if strike_type == "greater" and floor_strike is not None:
+        return float(floor_strike) + 1.0, None
+    if strike_type == "less" and cap_strike is not None:
+        return None, float(cap_strike)
+    if strike_type == "between" and floor_strike is not None and cap_strike is not None:
+        return float(floor_strike), float(cap_strike) + 1.0
+    return None, None
+
+
+def hourly_temperatures_for_date(
+    snapshot: dict[str, Any] | None,
+    target_date: str,
+    *,
+    remaining_only: bool,
+) -> list[float]:
+    if not snapshot:
+        return []
+
+    tz_name = snapshot.get("market", {}).get("timezone", "UTC")
+    provider = snapshot.get("provider")
+    forecast_timezone = snapshot.get("forecast_timezone")
+    pulled_at = datetime.fromisoformat(snapshot["pulled_at"].replace("Z", "+00:00")).astimezone(ZoneInfo(tz_name))
+    rows: list[float] = []
+    for row in snapshot.get("hourly", []):
+        local_time = parse_hourly_time(row.get("time"), tz_name, provider, forecast_timezone)
+        if not local_time or local_time.date().isoformat() != target_date:
+            continue
+        if remaining_only and local_time < pulled_at:
+            continue
+        temp = row.get("temperature_2m")
+        if isinstance(temp, (int, float)):
+            rows.append(float(temp))
+    return rows
+
+
+def hourly_path_pressure(
+    *,
+    provider_snapshots: dict[str, dict[str, Any]],
+    target_date: str,
+    lead_bucket: str,
+    strike_type: str | None,
+    floor_strike: Any,
+    cap_strike: Any,
+) -> dict[str, Any] | None:
+    lower, upper = contract_path_bounds(strike_type, floor_strike, cap_strike)
+    if lower is None and upper is None:
+        return None
+
+    remaining_only = lead_bucket == "same_day"
+    provider_rows = []
+    for provider, snapshot in provider_snapshots.items():
+        temps = hourly_temperatures_for_date(snapshot, target_date, remaining_only=remaining_only)
+        if not temps:
+            continue
+
+        if upper is not None:
+            violation_distances = [max(0.0, temp - upper) for temp in temps]
+            violating_hours = sum(1 for distance in violation_distances if distance > 0)
+            distance_pressure = sum(violation_distances)
+            max_gap = max(violation_distances) if violation_distances else 0.0
+        else:
+            max_temp = max(temps)
+            max_gap = max(0.0, (lower or 0.0) - max_temp)
+            violating_hours = len(temps) if max_gap > 0 else 0
+            distance_pressure = max_gap * max(1, len(temps) / 4.0)
+
+        provider_rows.append(
+            {
+                "provider": provider,
+                "hour_count": len(temps),
+                "violating_hours": violating_hours,
+                "distance_pressure_f": round(distance_pressure, 2),
+                "max_gap_f": round(max_gap, 2),
+                "max_hourly_forecast_f": round(max(temps), 2),
+            }
+        )
+
+    if not provider_rows:
+        return None
+
+    total_hours = sum(row["hour_count"] for row in provider_rows)
+    total_violations = sum(row["violating_hours"] for row in provider_rows)
+    total_distance = sum(row["distance_pressure_f"] for row in provider_rows)
+    pressure_score = (total_violations / max(1, total_hours)) + (total_distance / max(1.0, total_hours * 5.0))
+
+    return {
+        "hour_count": total_hours,
+        "violating_hour_count": total_violations,
+        "distance_pressure_f": round(total_distance, 2),
+        "pressure_score": round(pressure_score, 4),
+        "providers": provider_rows,
+    }
+
+
+def apply_hourly_path_pressure(model_prob: float, pressure: dict[str, Any] | None) -> float:
+    if not pressure:
+        return model_prob
+
+    pressure_score = float(pressure.get("pressure_score") or 0.0)
+    if pressure_score <= 0:
+        return model_prob
+
+    penalty = min(0.85, pressure_score * 0.55)
+    return max(0.001, min(0.999, model_prob * (1.0 - penalty)))
+
+
+def pick_yes_pricing(market: dict[str, Any], model_prob: float) -> tuple[str, float | None, float]:
+    cost_candidates = [
+        market.get("yes_ask_dollars"),
+        market.get("last_price_dollars"),
+        market.get("yes_bid_dollars"),
+        market.get("implied_probability"),
+    ]
+    contract_cost = next(
+        (value for value in cost_candidates if isinstance(value, (int, float))),
+        None,
+    )
+    recommended_side = "yes" if isinstance(contract_cost, (int, float)) and model_prob > contract_cost else "pass"
+    return recommended_side, contract_cost, model_prob
+
+
+def compute_city_model_rank_score(
+    market: dict[str, Any],
+    *,
+    model_prob: float,
+    edge: float,
+    adjusted_mean: float,
+    sigma: float,
+) -> tuple[float, str, float | None, float | None]:
+    recommended_side, contract_cost, win_prob = pick_yes_pricing(market, model_prob)
+    expected_value = (win_prob - contract_cost) if isinstance(contract_cost, (int, float)) else None
+    conviction = abs(model_prob - 0.5)
+    tradable = isinstance(contract_cost, (int, float)) and 0.03 <= contract_cost <= 0.97
+
+    strike_type = market.get("strike_type")
+    floor_strike = market.get("floor_strike")
+    cap_strike = market.get("cap_strike")
+    strike_gap = 0.0
+    if strike_type == "greater" and floor_strike is not None:
+        strike_gap = adjusted_mean - float(floor_strike)
+    elif strike_type == "less" and cap_strike is not None:
+        strike_gap = float(cap_strike) - adjusted_mean
+    elif strike_type == "between" and floor_strike is not None and cap_strike is not None:
+        low = float(floor_strike)
+        high = float(cap_strike)
+        if low <= adjusted_mean <= high:
+            strike_gap = min(adjusted_mean - low, high - adjusted_mean)
+        elif adjusted_mean < low:
+            strike_gap = adjusted_mean - low
+        else:
+            strike_gap = high - adjusted_mean
+
+    normalized_gap = strike_gap / sigma if sigma > 0 else 0.0
+    value_component = (expected_value if expected_value is not None else -1.0) * 180.0
+    edge_component = edge * 100.0
+    conviction_component = conviction * 50.0
+    gap_component = normalized_gap * 12.0
+    tradable_component = 8.0 if tradable else -25.0
+    score = round(
+        value_component +
+        edge_component +
+        conviction_component +
+        gap_component +
+        tradable_component,
+        2,
+    )
+    return score, recommended_side, contract_cost, expected_value
 
 
 def build_signal_comment(
@@ -269,6 +601,8 @@ def build_market_context_comment(
     *,
     noaa_forecast_max: float | None,
     open_meteo_forecast_max: float | None,
+    visual_crossing_forecast_max: float | None,
+    consensus_forecast_max: float,
     adjusted_mean: float,
     floor_strike: Any,
     cap_strike: Any,
@@ -284,18 +618,23 @@ def build_market_context_comment(
         source_bits.append(f"NOAA {noaa_forecast_max:.0f}F")
     if isinstance(open_meteo_forecast_max, (int, float)):
         source_bits.append(f"Open-Meteo {open_meteo_forecast_max:.0f}F")
+    if isinstance(visual_crossing_forecast_max, (int, float)):
+        source_bits.append(f"Visual Crossing {visual_crossing_forecast_max:.0f}F")
 
     spread_text = ""
-    if isinstance(noaa_forecast_max, (int, float)) and isinstance(open_meteo_forecast_max, (int, float)):
-        spread = round(float(open_meteo_forecast_max) - float(noaa_forecast_max), 1)
-        if abs(spread) < 0.5:
+    available = [
+        float(value)
+        for value in (noaa_forecast_max, open_meteo_forecast_max, visual_crossing_forecast_max)
+        if isinstance(value, (int, float))
+    ]
+    if len(available) >= 2:
+        spread = round(max(available) - min(available), 1)
+        if spread < 0.5:
             spread_text = "; forecast sources aligned"
-        elif spread > 0:
-            spread_text = f"; Open-Meteo is {spread:.0f}F hotter than NOAA"
         else:
-            spread_text = f"; Open-Meteo is {abs(spread):.0f}F cooler than NOAA"
+            spread_text = f"; provider spread {spread:.0f}F"
 
-    target_text = f"Adjusted model {adjusted_mean:.0f}F"
+    target_text = f"Consensus {consensus_forecast_max:.0f}F, adjusted model {adjusted_mean:.0f}F"
     if strike_type == "greater" and floor_strike is not None:
         target_text += f" vs {float(floor_strike):.0f}F yes cutoff"
     elif strike_type == "less" and cap_strike is not None:
@@ -346,16 +685,20 @@ def score_markets(
     kalshi_payload: dict[str, Any],
     noaa_snapshots: list[dict[str, Any]],
     open_meteo_snapshots: list[dict[str, Any]],
+    visual_crossing_snapshots: list[dict[str, Any]],
     calibration: dict[str, Any],
     error_model: dict[str, Any],
+    high_temp_residual_model: dict[str, Any],
+    preliminary_highs: dict[tuple[str, str], dict[str, Any]],
 ) -> dict[str, Any]:
     scored = []
 
     for market in kalshi_payload.get("markets", []):
         series_key = extract_series_key(market)
-        weather_snapshot, open_meteo_snapshot = pick_primary_snapshot(
-            noaa_snapshots, open_meteo_snapshots, series_key
-        )
+        noaa_snapshot = find_weather_snapshot(noaa_snapshots, series_key)
+        open_meteo_snapshot = find_weather_snapshot(open_meteo_snapshots, series_key)
+        visual_crossing_snapshot = find_weather_snapshot(visual_crossing_snapshots, series_key)
+        weather_snapshot = noaa_snapshot or visual_crossing_snapshot or open_meteo_snapshot
         if not weather_snapshot:
             continue
 
@@ -368,10 +711,33 @@ def score_markets(
             continue
 
         open_meteo_row = get_forecast_row(open_meteo_snapshot, target_date) if open_meteo_snapshot else None
+        visual_crossing_row = (
+            get_forecast_row(visual_crossing_snapshot, target_date) if visual_crossing_snapshot else None
+        )
 
-        forecast_max = forecast_row.get("temperature_2m_max")
-        if forecast_max is None:
+        noaa_forecast_max = (
+            round(float(forecast_row.get("temperature_2m_max")), 2)
+            if forecast_row.get("temperature_2m_max") is not None
+            else None
+        )
+        open_meteo_forecast_max = (
+            round(float(open_meteo_row.get("temperature_2m_max")), 2)
+            if open_meteo_row and open_meteo_row.get("temperature_2m_max") is not None
+            else None
+        )
+        visual_crossing_forecast_max = (
+            round(float(visual_crossing_row.get("temperature_2m_max")), 2)
+            if visual_crossing_row and visual_crossing_row.get("temperature_2m_max") is not None
+            else None
+        )
+        source_values = [
+            float(value)
+            for value in (noaa_forecast_max, open_meteo_forecast_max, visual_crossing_forecast_max)
+            if value is not None
+        ]
+        if not source_values:
             continue
+        forecast_max = round(median(source_values), 2)
 
         mapping = weather_mapping(weather_snapshot)
         location = mapping.get("location") or weather_snapshot.get("market", {}).get("location")
@@ -379,9 +745,52 @@ def score_markets(
             float(forecast_max), location, target_date, calibration
         )
         sigma = calibrated_sigma(weather_snapshot, forecast_row, target_date, calibration)
+        sigma = apply_source_spread_adjustment(sigma, source_values)
         lead_bucket = lead_bucket_for_snapshot(weather_snapshot, target_date)
         adjusted_mean, sigma, bucket_stats = apply_forecast_error_adjustment(
             adjusted_mean, sigma, location, target_date, lead_bucket, error_model
+        )
+        market_id = weather_snapshot.get("market", {}).get("market_id")
+        preliminary_row = preliminary_highs.get((market_id, target_date)) if market_id else None
+        preliminary_high = (
+            float(preliminary_row["preliminary_high_f"])
+            if preliminary_row and isinstance(preliminary_row.get("preliminary_high_f"), (int, float))
+            else None
+        )
+        provider_snapshots = {
+            provider_prefix(snapshot.get("provider")): snapshot
+            for snapshot in (noaa_snapshot, open_meteo_snapshot, visual_crossing_snapshot)
+            if snapshot
+        }
+        feature_row = None
+        if provider_snapshots:
+            latest_pulled_at = max(
+                snapshot["pulled_at"]
+                for snapshot in provider_snapshots.values()
+                if snapshot.get("pulled_at")
+            )
+            feature_row = build_combined_features(
+                market_id=market_id,
+                location=location,
+                forecast_date=target_date,
+                checkpoint_at=floor_checkpoint(latest_pulled_at),
+                provider_snapshots=provider_snapshots,
+            )
+        feature_model_adjustment = None
+        if high_temp_residual_model.get("active") and feature_row and is_morning_same_day_checkpoint(feature_row):
+            feature_model_adjustment = predict_residual(feature_row, high_temp_residual_model)
+            if feature_model_adjustment is not None:
+                adjusted_mean = round(float(forecast_max) + feature_model_adjustment, 2)
+        if preliminary_high is not None:
+            adjusted_mean = round(max(adjusted_mean, preliminary_high), 2)
+        sigma, intraday_sigma_reason = same_day_intraday_sigma(
+            sigma=sigma,
+            snapshot=weather_snapshot,
+            forecast_date=target_date,
+            forecast_max=float(forecast_max),
+            source_values=source_values,
+            feature_row=feature_row,
+            preliminary_high=preliminary_high,
         )
         model_prob = predict_probability(
             strike_type=market.get("strike_type"),
@@ -389,26 +798,38 @@ def score_markets(
             cap_strike=market.get("cap_strike"),
             forecast_max=adjusted_mean,
             sigma=sigma,
+            observed_floor=preliminary_high if lead_bucket == "same_day" else None,
         )
         if model_prob is None:
             continue
+        raw_model_prob = model_prob
+        path_pressure = hourly_path_pressure(
+            provider_snapshots=provider_snapshots,
+            target_date=target_date,
+            lead_bucket=lead_bucket,
+            strike_type=market.get("strike_type"),
+            floor_strike=market.get("floor_strike"),
+            cap_strike=market.get("cap_strike"),
+        )
+        model_prob = apply_hourly_path_pressure(model_prob, path_pressure)
 
         kalshi_prob = market.get("implied_probability")
         if kalshi_prob is None:
             continue
 
         edge = model_prob - float(kalshi_prob)
+        city_model_rank_score, recommended_side, side_contract_cost, side_expected_value = compute_city_model_rank_score(
+            market,
+            model_prob=model_prob,
+            edge=edge,
+            adjusted_mean=adjusted_mean,
+            sigma=sigma,
+        )
         climatology_mean = float(month_stats["mean_high_f"]) if month_stats else None
         historical_bias = float(bucket_stats["mean_error_f"]) if bucket_stats else None
-        open_meteo_forecast_max = (
-            round(float(open_meteo_row.get("temperature_2m_max")), 2)
-            if open_meteo_row and open_meteo_row.get("temperature_2m_max") is not None
-            else None
-        )
-        noaa_forecast_max = round(float(forecast_max), 2)
         forecast_source_spread = (
-            round(open_meteo_forecast_max - noaa_forecast_max, 2)
-            if open_meteo_forecast_max is not None
+            round(max(source_values) - min(source_values), 2)
+            if len(source_values) >= 2
             else None
         )
 
@@ -416,13 +837,29 @@ def score_markets(
             {
                 **market,
                 "model_probability": round(model_prob, 4),
+                "raw_model_probability": round(raw_model_prob, 4),
                 "edge": round(edge, 4),
+                "city_model_rank_score": city_model_rank_score,
+                "model_recommended_side": recommended_side,
+                "model_contract_cost": round(side_contract_cost, 4) if isinstance(side_contract_cost, (int, float)) else None,
+                "model_expected_value": round(side_expected_value, 4) if isinstance(side_expected_value, (int, float)) else None,
+                "hourly_path_pressure": path_pressure,
+                "hourly_path_pressure_score": path_pressure.get("pressure_score") if path_pressure else None,
+                "hourly_path_violation_hours": path_pressure.get("violating_hour_count") if path_pressure else None,
+                "hourly_path_hours": path_pressure.get("hour_count") if path_pressure else None,
+                "hourly_path_distance_pressure_f": path_pressure.get("distance_pressure_f") if path_pressure else None,
                 "forecast_date": target_date,
-                "forecast_max_f": noaa_forecast_max,
+                "forecast_max_f": forecast_max,
                 "noaa_forecast_max_f": noaa_forecast_max,
                 "open_meteo_forecast_max_f": open_meteo_forecast_max,
+                "visual_crossing_forecast_max_f": visual_crossing_forecast_max,
                 "forecast_source_spread_f": forecast_source_spread,
                 "adjusted_forecast_max_f": adjusted_mean,
+                "feature_model_adjustment_f": round(feature_model_adjustment, 3) if feature_model_adjustment is not None else None,
+                "feature_model_active": bool(high_temp_residual_model.get("active")),
+                "preliminary_high_f": round(preliminary_high, 2) if preliminary_high is not None else None,
+                "preliminary_high_observed_at": preliminary_row.get("max_observed_at") if preliminary_row else None,
+                "intraday_sigma_reason": intraday_sigma_reason,
                 "forecast_min_f": forecast_row.get("temperature_2m_min"),
                 "forecast_sigma_f": round(sigma, 2),
                 "lead_bucket": lead_bucket,
@@ -440,6 +877,8 @@ def score_markets(
                 "market_context": build_market_context_comment(
                     noaa_forecast_max=noaa_forecast_max,
                     open_meteo_forecast_max=open_meteo_forecast_max,
+                    visual_crossing_forecast_max=visual_crossing_forecast_max,
+                    consensus_forecast_max=forecast_max,
                     adjusted_mean=adjusted_mean,
                     floor_strike=market.get("floor_strike"),
                     cap_strike=market.get("cap_strike"),
@@ -468,6 +907,7 @@ def score_markets(
         "weather_snapshot_count": len(noaa_snapshots) or len(open_meteo_snapshots),
         "noaa_snapshot_count": len(noaa_snapshots),
         "open_meteo_snapshot_count": len(open_meteo_snapshots),
+        "visual_crossing_snapshot_count": len(visual_crossing_snapshots),
         "market_count": len(scored),
         "markets": scored,
     }
@@ -502,13 +942,25 @@ def main() -> int:
         kalshi_payload = load_json(KALSHI_PATH)
         noaa_snapshots = load_weather_snapshots(NOAA_WEATHER_PATH)
         open_meteo_snapshots = load_weather_snapshots(WEATHER_PATH)
+        visual_crossing_snapshots = load_weather_snapshots(VISUAL_CROSSING_WEATHER_PATH)
         calibration = load_calibration()
         error_model = load_forecast_error_model()
+        high_temp_residual_model = load_high_temp_residual_model()
+        preliminary_highs = load_preliminary_highs()
     except FileNotFoundError as error:
         print(f"Missing input file: {error}", file=sys.stderr)
         return 1
 
-    payload = score_markets(kalshi_payload, noaa_snapshots, open_meteo_snapshots, calibration, error_model)
+    payload = score_markets(
+        kalshi_payload,
+        noaa_snapshots,
+        open_meteo_snapshots,
+        visual_crossing_snapshots,
+        calibration,
+        error_model,
+        high_temp_residual_model,
+        preliminary_highs,
+    )
     snapshot_path = write_outputs(payload)
 
     print(f"Scored {payload['market_count']} temperature markets")

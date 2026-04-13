@@ -2,13 +2,18 @@ const fs = require("fs");
 const path = require("path");
 const { Pool } = require("pg");
 
-const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_markets.json");
-const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
-const noaaHistoryLatestPath = path.join(__dirname, "output", "history", "latest_noaa_history.json");
-const preliminaryHighsLatestPath = path.join(__dirname, "output", "preliminary", "latest_preliminary_daily_highs.json");
-const openMeteoLatestForecastsPath = path.join(__dirname, "output", "weather", "latest_forecasts.json");
-const noaaLatestForecastsPath = path.join(__dirname, "output", "weather", "latest_forecasts_noaa.json");
-const visualCrossingLatestForecastsPath = path.join(__dirname, "output", "weather", "latest_forecasts_visual_crossing.json");
+function runtimeDataPath(...segments) {
+  const outputPath = path.join(__dirname, "output", ...segments);
+  return fs.existsSync(outputPath) ? outputPath : path.join(__dirname, "deploy_data", ...segments);
+}
+
+const kalshiLatestPath = runtimeDataPath("kalshi", "latest_markets.json");
+const modelLatestPath = runtimeDataPath("models", "latest_scored_markets.json");
+const noaaHistoryLatestPath = runtimeDataPath("history", "latest_noaa_history.json");
+const preliminaryHighsLatestPath = runtimeDataPath("preliminary", "latest_preliminary_daily_highs.json");
+const openMeteoLatestForecastsPath = runtimeDataPath("weather", "latest_forecasts.json");
+const noaaLatestForecastsPath = runtimeDataPath("weather", "latest_forecasts_noaa.json");
+const visualCrossingLatestForecastsPath = runtimeDataPath("weather", "latest_forecasts_visual_crossing.json");
 const trackedMarketsPath = path.join(__dirname, "config", "tracked_markets.json");
 const manualWatchlistPath = path.join(__dirname, "config", "watchlist.json");
 const weatherSnapshotsDir = path.join(__dirname, "output", "weather", "snapshots");
@@ -2441,17 +2446,7 @@ function hasExplicitTimezone(value) {
   return /(?:z|[+-]\d{2}:\d{2})$/i.test(String(value || ""));
 }
 
-function localDateTimeParts(value, timezone) {
-  if (!value) {
-    return null;
-  }
-
-  if (!hasExplicitTimezone(value)) {
-    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
-    return match ? { dateKey: match[1], hour: Number(match[2]) } : null;
-  }
-
-  const date = new Date(value);
+function dateTimePartsForZone(date, timezone) {
   if (Number.isNaN(date.getTime())) {
     return null;
   }
@@ -2475,10 +2470,45 @@ function localDateTimeParts(value, timezone) {
   };
 }
 
-function selectHourlyRowsForDate(hourlyRows, forecastDate, timezone) {
+function offsetlessUtcDate(value) {
+  const text = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(text)) {
+    return null;
+  }
+  return new Date(`${text}Z`);
+}
+
+function shouldTreatOffsetlessOpenMeteoAsUtc(provider, forecastTimezone) {
+  if (provider !== "open-meteo") {
+    return false;
+  }
+  const normalized = String(forecastTimezone || "UTC").toUpperCase();
+  return normalized === "UTC" || normalized === "GMT";
+}
+
+function localDateTimeParts(value, timezone, provider, forecastTimezone) {
+  if (!value) {
+    return null;
+  }
+
+  if (!hasExplicitTimezone(value)) {
+    if (shouldTreatOffsetlessOpenMeteoAsUtc(provider, forecastTimezone)) {
+      const date = offsetlessUtcDate(value);
+      return date ? dateTimePartsForZone(date, timezone) : null;
+    }
+
+    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
+    return match ? { dateKey: match[1], hour: Number(match[2]) } : null;
+  }
+
+  const date = new Date(value);
+  return dateTimePartsForZone(date, timezone);
+}
+
+function selectHourlyRowsForDate(hourlyRows, forecastDate, timezone, provider, forecastTimezone) {
   const mappedRows = (hourlyRows || [])
     .map((row) => {
-      const localParts = localDateTimeParts(row.time, timezone);
+      const localParts = localDateTimeParts(row.time, timezone, provider, forecastTimezone);
       return {
         sourceDate: localParts?.dateKey,
         localHour: typeof localParts?.hour === "number" ? localParts.hour : null,
@@ -2516,7 +2546,14 @@ function readLatestHourlyProviderPaths({ marketId, location, forecastDate }) {
       return;
     }
     const timezone = snapshot.market?.timezone || "America/New_York";
-    const hourly = selectHourlyRowsForDate(snapshot.hourly, forecastDate, timezone);
+    const forecastTimezone = snapshot.forecast_timezone || snapshot.provider_timezone;
+    const hourly = selectHourlyRowsForDate(
+      snapshot.hourly,
+      forecastDate,
+      timezone,
+      snapshot.provider,
+      forecastTimezone
+    );
     if (!hourly.length) {
       return;
     }
@@ -2554,6 +2591,25 @@ function readLatestHourlyProviderPaths({ marketId, location, forecastDate }) {
   }
 
   return [...latestByProvider.values()].sort((left, right) => left.provider.localeCompare(right.provider));
+}
+
+function hourlyProviderDiagnostics({ marketId, location, forecastDate }) {
+  const latestPaths = [
+    ["noaa-nws", noaaLatestForecastsPath],
+    ["open-meteo", openMeteoLatestForecastsPath],
+    ["visual-crossing", visualCrossingLatestForecastsPath],
+  ];
+
+  return {
+    marketId: marketId || null,
+    location: location || null,
+    forecastDate: forecastDate || null,
+    latestFiles: latestPaths.map(([provider, filePath]) => ({
+      provider,
+      present: fs.existsSync(filePath),
+      file: path.relative(__dirname, filePath),
+    })),
+  };
 }
 
 async function buildMarketDetailView({ ticker, days = 5 } = {}) {
@@ -2602,6 +2658,12 @@ async function buildMarketDetailView({ ticker, days = 5 } = {}) {
     history.rows.find((row) => row.marketId === marketId && row.date === forecastDate) ||
     null;
 
+  const hourlyProviders = readLatestHourlyProviderPaths({
+    marketId,
+    location: selection.matched_location,
+    forecastDate,
+  });
+
   return {
     updatedAt: new Date().toISOString(),
     dataBackend: history.dataBackend || "static-json",
@@ -2630,11 +2692,11 @@ async function buildMarketDetailView({ ticker, days = 5 } = {}) {
         typeof selection.hourly_path_hours === "number" ? selection.hourly_path_hours : null,
     },
     series,
-    hourlyProviders: readLatestHourlyProviderPaths({
-      marketId,
-      location: selection.matched_location,
-      forecastDate,
-    }),
+    hourlyProviders,
+    hourlyProviderDiagnostics:
+      hourlyProviders.length === 0
+        ? hourlyProviderDiagnostics({ marketId, location: selection.matched_location, forecastDate })
+        : null,
     actual,
   };
 }

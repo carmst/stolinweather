@@ -70,7 +70,7 @@ def fetch_forecast(market: dict[str, Any], forecast_days: int) -> dict[str, Any]
     params = {
         "latitude": market["latitude"],
         "longitude": market["longitude"],
-        "timezone": "UTC",
+        "timezone": market["timezone"],
         "temperature_unit": "fahrenheit",
         "wind_speed_unit": "mph",
         "precipitation_unit": "inch",
@@ -124,6 +124,8 @@ def normalize_snapshot(
     return {
         "pulled_at": pulled_at,
         "provider": PROVIDER,
+        "forecast_timezone": payload.get("timezone") or market["timezone"],
+        "utc_offset_seconds": payload.get("utc_offset_seconds"),
         "market": {
             "market_id": market["market_id"],
             "contract": market["contract"],

@@ -23,7 +23,24 @@ function linePath(points, xFor, yFor) {
     .join(" ");
 }
 
-function buildLineChart({ series, actualHighF, height = 340, xMode = "time" }) {
+function buildHourlyEmptyState(diagnostics) {
+  const files = diagnostics?.latestFiles || [];
+  const missing = files.filter((file) => !file.present).map((file) => file.file);
+  const detail = missing.length
+    ? `Missing bundled weather files: ${missing.join(", ")}`
+    : diagnostics
+      ? `No hourly rows matched ${diagnostics.marketId || diagnostics.location || "this market"} on ${diagnostics.forecastDate || "this date"}.`
+      : "No provider hourly path returned for this market yet.";
+
+  return `
+    <div class="h-80 rounded-3xl bg-surface-container-high flex flex-col items-center justify-center text-center px-8">
+      <div class="text-on-surface text-xl font-headline font-bold mb-2">Hourly path not available</div>
+      <div class="text-on-surface-variant max-w-3xl">${detail}</div>
+    </div>
+  `;
+}
+
+function buildLineChart({ series, actualHighF, height = 340, xMode = "time", diagnostics = null }) {
   const width = 1000;
   const padding = { top: 28, right: 28, bottom: 42, left: 54 };
   const hasProviderPoints = series.some((item) => item.points.length);
@@ -35,7 +52,7 @@ function buildLineChart({ series, actualHighF, height = 340, xMode = "time" }) {
   }
   if (typeof actualHighF === "number") values.push(actualHighF);
   if (!hasProviderPoints) {
-    return `<div class="h-80 rounded-3xl bg-surface-container-high flex items-center justify-center text-on-surface-variant">No provider hourly path returned for this market yet.</div>`;
+    return buildHourlyEmptyState(diagnostics);
   }
   if (!values.length) {
     return `<div class="h-80 rounded-3xl bg-surface-container-high flex items-center justify-center text-on-surface-variant">No chart points available yet.</div>`;
@@ -126,10 +143,10 @@ function providerLabel(provider) {
 
 function buildForecastSeries(points) {
   return [
-    { key: "modelHighF", label: "Stolin Model", color: "#6debfd" },
-    { key: "noaaHighF", label: "NOAA", color: "#f0f8fc", opacity: 0.72 },
-    { key: "openMeteoHighF", label: "Open-Meteo", color: "#ff7348" },
-    { key: "visualCrossingHighF", label: "Visual Crossing", color: "#93f1fd", opacity: 0.75 },
+    { key: "modelHighF", label: "Stolin Model", color: "#ff7348", strokeWidth: 5 },
+    { key: "noaaHighF", label: "NOAA", color: "#f0f8fc", opacity: 0.5, strokeWidth: 3 },
+    { key: "openMeteoHighF", label: "Open-Meteo", color: "#a4acb0", opacity: 0.55, strokeWidth: 3 },
+    { key: "visualCrossingHighF", label: "Visual Crossing", color: "#93f1fd", opacity: 0.55, strokeWidth: 3 },
   ].map((config) => ({
     ...config,
     points: points
@@ -141,12 +158,14 @@ function buildForecastSeries(points) {
 function buildHourlySeries(hourlyProviders) {
   const colors = {
     "noaa-nws": "#f0f8fc",
-    "open-meteo": "#ff7348",
+    "open-meteo": "#a4acb0",
     "visual-crossing": "#93f1fd",
   };
   return hourlyProviders.map((provider) => ({
     label: providerLabel(provider.provider),
     color: colors[provider.provider] || "#6debfd",
+    opacity: 0.55,
+    strokeWidth: 3,
     points: provider.hourly.map((point) => ({
       time: point.time,
       localHour: point.localHour,
@@ -170,10 +189,9 @@ function addModelTargetSeries(series, modelHighF) {
   return [
     {
       label: "Stolin Model High",
-      color: "#6debfd",
-      opacity: 0.95,
-      dash: "10 10",
-      strokeWidth: 3,
+      color: "#ff7348",
+      opacity: 1,
+      strokeWidth: 5,
       pointRadius: 0,
       points: [
         { time: times[0], localHour: 0, value: modelHighF },
@@ -250,7 +268,7 @@ async function loadMarketDetail() {
           ${hourlySeries.map((item) => `<span><span style="background:${item.color}" class="inline-block w-3 h-3 rounded-full mr-2"></span>${item.label}</span>`).join("")}
         </div>
       </div>
-      ${buildLineChart({ series: hourlySeries, actualHighF, xMode: "localHour" })}
+      ${buildLineChart({ series: hourlySeries, actualHighF, xMode: "localHour", diagnostics: payload.hourlyProviderDiagnostics })}
     </section>
 
     <section class="glass-panel rounded-3xl p-6 md:p-8 border border-white/5 mb-10">
