@@ -2437,14 +2437,56 @@ function snapshotMatchesMarket(snapshot, { marketId, location }) {
   return snapshotLocations.some((candidate) => normalizeLocationKey(candidate) === targetLocation);
 }
 
-function selectHourlyRowsForDate(hourlyRows, forecastDate) {
+function hasExplicitTimezone(value) {
+  return /(?:z|[+-]\d{2}:\d{2})$/i.test(String(value || ""));
+}
+
+function localDateTimeParts(value, timezone) {
+  if (!value) {
+    return null;
+  }
+
+  if (!hasExplicitTimezone(value)) {
+    const match = String(value).match(/^(\d{4}-\d{2}-\d{2})T(\d{2})/);
+    return match ? { dateKey: match[1], hour: Number(match[2]) } : null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone || "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  let hour = Number(byType.hour);
+  if (hour === 24) {
+    hour = 0;
+  }
+  return {
+    dateKey: `${byType.year}-${byType.month}-${byType.day}`,
+    hour,
+  };
+}
+
+function selectHourlyRowsForDate(hourlyRows, forecastDate, timezone) {
   const mappedRows = (hourlyRows || [])
-    .map((row) => ({
-      sourceDate: String(row.time || "").slice(0, 10),
-      time: row.time,
-      temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
-      shortForecast: row.short_forecast || row.conditions || "",
-    }))
+    .map((row) => {
+      const localParts = localDateTimeParts(row.time, timezone);
+      return {
+        sourceDate: localParts?.dateKey,
+        localHour: typeof localParts?.hour === "number" ? localParts.hour : null,
+        time: row.time,
+        temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
+        shortForecast: row.short_forecast || row.conditions || "",
+      };
+    })
     .filter((row) => row.time && typeof row.temperatureF === "number");
 
   const exactRows = mappedRows.filter((row) => row.sourceDate === forecastDate);
@@ -2473,7 +2515,8 @@ function readLatestHourlyProviderPaths({ marketId, location, forecastDate }) {
     if (!snapshotMatchesMarket(snapshot, { marketId, location }) || !snapshot.provider || !snapshot.pulled_at) {
       return;
     }
-    const hourly = selectHourlyRowsForDate(snapshot.hourly, forecastDate);
+    const timezone = snapshot.market?.timezone || "America/New_York";
+    const hourly = selectHourlyRowsForDate(snapshot.hourly, forecastDate, timezone);
     if (!hourly.length) {
       return;
     }
@@ -2483,6 +2526,7 @@ function readLatestHourlyProviderPaths({ marketId, location, forecastDate }) {
       latestByProvider.set(snapshot.provider, {
         provider: snapshot.provider,
         pulledAt: snapshot.pulled_at,
+        timezone,
         hourly,
       });
     }

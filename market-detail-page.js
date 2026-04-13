@@ -23,7 +23,7 @@ function linePath(points, xFor, yFor) {
     .join(" ");
 }
 
-function buildLineChart({ series, actualHighF, height = 340 }) {
+function buildLineChart({ series, actualHighF, height = 340, xMode = "time" }) {
   const width = 1000;
   const padding = { top: 28, right: 28, bottom: 42, left: 54 };
   const hasProviderPoints = series.some((item) => item.points.length);
@@ -45,13 +45,24 @@ function buildLineChart({ series, actualHighF, height = 340 }) {
   const maxValue = Math.ceil(Math.max(...values) + 2);
   const domain = Math.max(1, maxValue - minValue);
   const maxLength = Math.max(...series.map((item) => item.points.length), 1);
-  const times = series
-    .flatMap((item) => item.points.map((point) => Date.parse(point.time)))
-    .filter((time) => Number.isFinite(time));
+  const xValues = xMode === "localHour"
+    ? series.flatMap((item) => item.points.map((point) => point.localHour)).filter((value) => typeof value === "number")
+    : [];
+  const minXValue = xValues.length ? Math.min(...xValues, 0) : 0;
+  const maxXValue = xValues.length ? Math.max(...xValues, 23) : 23;
+  const xValueDomain = Math.max(1, maxXValue - minXValue);
+  const times = xMode === "time"
+    ? series
+      .flatMap((item) => item.points.map((point) => Date.parse(point.time)))
+      .filter((time) => Number.isFinite(time))
+    : [];
   const minTime = times.length ? Math.min(...times) : null;
   const maxTime = times.length ? Math.max(...times) : null;
   const timeDomain = minTime == null || maxTime == null ? null : Math.max(1, maxTime - minTime);
   const xFor = (point, index) => {
+    if (xMode === "localHour" && typeof point.localHour === "number") {
+      return padding.left + ((point.localHour - minXValue) / xValueDomain) * (width - padding.left - padding.right);
+    }
     const parsedTime = Date.parse(point.time);
     const position =
       timeDomain != null && Number.isFinite(parsedTime)
@@ -81,13 +92,23 @@ function buildLineChart({ series, actualHighF, height = 340 }) {
           : `<line x1="${padding.left}" y1="${actualY}" x2="${width - padding.right}" y2="${actualY}" stroke="#f0f8fc" stroke-width="2" stroke-dasharray="8 8" opacity="0.55" />
              <text x="${width - padding.right - 130}" y="${actualY - 8}" fill="#f0f8fc" font-size="18">actual ${formatTemp(actualHighF)}</text>`
       }
+      ${
+        xMode === "localHour"
+          ? [0, 6, 12, 18, 23].map((hour) => {
+              const x = padding.left + ((hour - minXValue) / xValueDomain) * (width - padding.left - padding.right);
+              const label = hour === 0 ? "12a" : hour < 12 ? `${hour}a` : hour === 12 ? "12p" : `${hour - 12}p`;
+              return `<line x1="${x}" y1="${height - padding.bottom}" x2="${x}" y2="${height - padding.bottom + 7}" stroke="rgba(255,255,255,0.18)" />
+                <text x="${x}" y="${height - 12}" fill="#6e777a" font-size="18" text-anchor="middle">${label}</text>`;
+            }).join("")
+          : ""
+      }
       ${series
         .filter((item) => item.points.length)
         .map(
           (item) => `
-            <path d="${linePath(item.points, xFor, yFor)}" fill="none" stroke="${item.color}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="${item.opacity || 1}"></path>
+            <path d="${linePath(item.points, xFor, yFor)}" fill="none" stroke="${item.color}" stroke-width="${item.strokeWidth || 4}" stroke-linecap="round" stroke-linejoin="round" opacity="${item.opacity || 1}" ${item.dash ? `stroke-dasharray="${item.dash}"` : ""}></path>
             ${item.points
-              .map((point, index) => `<circle cx="${xFor(point, index)}" cy="${yFor(point)}" r="4" fill="${item.color}"><title>${item.label}: ${formatTemp(point.value)} at ${formatTime(point.time)}</title></circle>`)
+              .map((point, index) => `<circle cx="${xFor(point, index)}" cy="${yFor(point)}" r="${item.pointRadius || 4}" fill="${item.color}"><title>${item.label}: ${formatTemp(point.value)} at ${xMode === "localHour" && typeof point.localHour === "number" ? `${point.localHour}:00 local` : formatTime(point.time)}</title></circle>`)
               .join("")}
           `
         )
@@ -126,7 +147,11 @@ function buildHourlySeries(hourlyProviders) {
   return hourlyProviders.map((provider) => ({
     label: providerLabel(provider.provider),
     color: colors[provider.provider] || "#6debfd",
-    points: provider.hourly.map((point) => ({ time: point.time, value: point.temperatureF })),
+    points: provider.hourly.map((point) => ({
+      time: point.time,
+      localHour: point.localHour,
+      value: point.temperatureF,
+    })),
   }));
 }
 
@@ -147,9 +172,12 @@ function addModelTargetSeries(series, modelHighF) {
       label: "Stolin Model High",
       color: "#6debfd",
       opacity: 0.95,
+      dash: "10 10",
+      strokeWidth: 3,
+      pointRadius: 0,
       points: [
-        { time: times[0], value: modelHighF },
-        { time: times[times.length - 1], value: modelHighF },
+        { time: times[0], localHour: 0, value: modelHighF },
+        { time: times[times.length - 1], localHour: 23, value: modelHighF },
       ],
     },
     ...series,
@@ -222,7 +250,7 @@ async function loadMarketDetail() {
           ${hourlySeries.map((item) => `<span><span style="background:${item.color}" class="inline-block w-3 h-3 rounded-full mr-2"></span>${item.label}</span>`).join("")}
         </div>
       </div>
-      ${buildLineChart({ series: hourlySeries, actualHighF })}
+      ${buildLineChart({ series: hourlySeries, actualHighF, xMode: "localHour" })}
     </section>
 
     <section class="glass-panel rounded-3xl p-6 md:p-8 border border-white/5 mb-10">
