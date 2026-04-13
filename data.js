@@ -6,6 +6,9 @@ const kalshiLatestPath = path.join(__dirname, "output", "kalshi", "latest_market
 const modelLatestPath = path.join(__dirname, "output", "models", "latest_scored_markets.json");
 const noaaHistoryLatestPath = path.join(__dirname, "output", "history", "latest_noaa_history.json");
 const preliminaryHighsLatestPath = path.join(__dirname, "output", "preliminary", "latest_preliminary_daily_highs.json");
+const openMeteoLatestForecastsPath = path.join(__dirname, "output", "weather", "latest_forecasts.json");
+const noaaLatestForecastsPath = path.join(__dirname, "output", "weather", "latest_forecasts_noaa.json");
+const visualCrossingLatestForecastsPath = path.join(__dirname, "output", "weather", "latest_forecasts_visual_crossing.json");
 const trackedMarketsPath = path.join(__dirname, "config", "tracked_markets.json");
 const manualWatchlistPath = path.join(__dirname, "config", "watchlist.json");
 const weatherSnapshotsDir = path.join(__dirname, "output", "weather", "snapshots");
@@ -518,6 +521,15 @@ function loadNoaaHistoryPayload() {
 function loadPreliminaryHighsPayload() {
   try {
     const raw = fs.readFileSync(preliminaryHighsLatestPath, "utf8");
+    return JSON.parse(raw);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function loadJsonFile(filePath) {
+  try {
+    const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw);
   } catch (_error) {
     return null;
@@ -2402,37 +2414,58 @@ function readModelSnapshotPoints({ ticker, forecastDate }) {
 }
 
 function readLatestHourlyProviderPaths({ marketId, forecastDate }) {
-  if (!marketId || !forecastDate || !fs.existsSync(weatherSnapshotsDir)) {
+  if (!marketId || !forecastDate) {
     return [];
   }
 
   const latestByProvider = new Map();
-  const entries = fs.readdirSync(weatherSnapshotsDir).filter((entry) => entry.endsWith(".jsonl")).sort();
 
-  for (const entry of entries) {
-    for (const snapshot of loadJsonLines(path.join(weatherSnapshotsDir, entry))) {
+  const addSnapshot = (snapshot) => {
+    if (snapshot.market?.market_id !== marketId || !snapshot.provider || !snapshot.pulled_at) {
+      return;
+    }
+    const hourly = (snapshot.hourly || [])
+      .filter((row) => String(row.time || "").slice(0, 10) === forecastDate)
+      .map((row) => ({
+        time: row.time,
+        temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
+        shortForecast: row.short_forecast || row.conditions || "",
+      }))
+      .filter((row) => row.time && typeof row.temperatureF === "number");
+    if (!hourly.length) {
+      return;
+    }
+
+    const existing = latestByProvider.get(snapshot.provider);
+    if (!existing || new Date(snapshot.pulled_at) > new Date(existing.pulledAt)) {
+      latestByProvider.set(snapshot.provider, {
+        provider: snapshot.provider,
+        pulledAt: snapshot.pulled_at,
+        hourly,
+      });
+    }
+  };
+
+  for (const latestPath of [
+    noaaLatestForecastsPath,
+    openMeteoLatestForecastsPath,
+    visualCrossingLatestForecastsPath,
+  ]) {
+    const payload = loadJsonFile(latestPath);
+    const snapshots = Array.isArray(payload) ? payload : payload?.snapshots || payload?.forecasts || [];
+    for (const snapshot of snapshots) {
+      addSnapshot(snapshot);
+    }
+  }
+
+  if (latestByProvider.size === 0 && fs.existsSync(weatherSnapshotsDir)) {
+    const entries = fs.readdirSync(weatherSnapshotsDir).filter((entry) => entry.endsWith(".jsonl")).sort();
+    for (const entry of entries) {
+      for (const snapshot of loadJsonLines(path.join(weatherSnapshotsDir, entry))) {
       if (snapshot.market?.market_id !== marketId || !snapshot.provider || !snapshot.pulled_at) {
         continue;
       }
-      const hourly = (snapshot.hourly || [])
-        .filter((row) => String(row.time || "").slice(0, 10) === forecastDate)
-        .map((row) => ({
-          time: row.time,
-          temperatureF: typeof row.temperature_2m === "number" ? row.temperature_2m : null,
-          shortForecast: row.short_forecast || row.conditions || "",
-        }))
-        .filter((row) => row.time && typeof row.temperatureF === "number");
-      if (!hourly.length) {
-        continue;
-      }
-
-      const existing = latestByProvider.get(snapshot.provider);
-      if (!existing || new Date(snapshot.pulled_at) > new Date(existing.pulledAt)) {
-        latestByProvider.set(snapshot.provider, {
-          provider: snapshot.provider,
-          pulledAt: snapshot.pulled_at,
-          hourly,
-        });
+        addSnapshot(snapshot);
       }
     }
   }

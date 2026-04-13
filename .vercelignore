@@ -25,3 +25,7 @@ db/seed_current_state.sql
 !output/history/latest_noaa_history.json
 !output/preliminary/
 !output/preliminary/latest_preliminary_daily_highs.json
+!output/weather/
+!output/weather/latest_forecasts.json
+!output/weather/latest_forecasts_noaa.json
+!output/weather/latest_forecasts_visual_crossing.json

@@ -126,6 +126,32 @@ function buildHourlySeries(hourlyProviders) {
   }));
 }
 
+function addModelTargetSeries(series, modelHighF) {
+  if (typeof modelHighF !== "number") {
+    return series;
+  }
+  const times = series
+    .flatMap((item) => item.points.map((point) => point.time))
+    .filter(Boolean)
+    .sort((left, right) => Date.parse(left) - Date.parse(right));
+  if (!times.length) {
+    return series;
+  }
+
+  return [
+    {
+      label: "Stolin Model High",
+      color: "#6debfd",
+      opacity: 0.95,
+      points: [
+        { time: times[0], value: modelHighF },
+        { time: times[times.length - 1], value: modelHighF },
+      ],
+    },
+    ...series,
+  ];
+}
+
 function statCard(label, value, subtle, colorClass = "text-primary") {
   return `
     <div class="glass-panel rounded-3xl p-6 border border-white/5">
@@ -151,7 +177,7 @@ async function loadMarketDetail() {
 
   const actualHighF = payload.actual?.actualHighF ?? null;
   const forecastSeries = buildForecastSeries(payload.series || []);
-  const hourlySeries = buildHourlySeries(payload.hourlyProviders || []);
+  const hourlySeries = addModelTargetSeries(buildHourlySeries(payload.hourlyProviders || []), market.latestModelHighF);
   const latestPoint = [...(payload.series || [])].reverse().find((point) => typeof point.modelHighF === "number");
   const latestEv = market.latestExpectedValue;
   const pathText =
@@ -185,27 +211,27 @@ async function loadMarketDetail() {
     <section class="glass-panel rounded-3xl p-6 md:p-8 border border-white/5 mb-10">
       <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
         <div>
-          <h2 class="text-3xl font-headline font-extrabold tracking-tight">Forecast Drift</h2>
-          <p class="text-on-surface-variant">Collected forecast snapshots for this exact Kalshi market.</p>
-        </div>
-        <div class="flex flex-wrap gap-4 text-xs font-label uppercase tracking-widest text-on-surface-variant">
-          ${forecastSeries.map((item) => `<span><span style="background:${item.color}" class="inline-block w-3 h-3 rounded-full mr-2"></span>${item.label}</span>`).join("")}
-        </div>
-      </div>
-      ${buildLineChart({ series: forecastSeries, actualHighF })}
-    </section>
-
-    <section class="glass-panel rounded-3xl p-6 md:p-8 border border-white/5 mb-10">
-      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
-        <div>
-          <h2 class="text-3xl font-headline font-extrabold tracking-tight">Latest Hourly Path</h2>
-          <p class="text-on-surface-variant">Hourly temperatures by provider for the contract date. This is the path-pressure view.</p>
+          <h2 class="text-3xl font-headline font-extrabold tracking-tight">Latest Hourly Day Shape</h2>
+          <p class="text-on-surface-variant">Hourly temperatures by provider for the contract date, with our model high overlaid as the target line.</p>
         </div>
         <div class="flex flex-wrap gap-4 text-xs font-label uppercase tracking-widest text-on-surface-variant">
           ${hourlySeries.map((item) => `<span><span style="background:${item.color}" class="inline-block w-3 h-3 rounded-full mr-2"></span>${item.label}</span>`).join("")}
         </div>
       </div>
       ${buildLineChart({ series: hourlySeries, actualHighF })}
+    </section>
+
+    <section class="glass-panel rounded-3xl p-6 md:p-8 border border-white/5 mb-10">
+      <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
+        <div>
+          <h2 class="text-3xl font-headline font-extrabold tracking-tight">Forecast Drift</h2>
+          <p class="text-on-surface-variant">Collected max-temperature forecast snapshots for this exact Kalshi market. In prod this can be a compact latest-point view until snapshot history is stored in Postgres.</p>
+        </div>
+        <div class="flex flex-wrap gap-4 text-xs font-label uppercase tracking-widest text-on-surface-variant">
+          ${forecastSeries.map((item) => `<span><span style="background:${item.color}" class="inline-block w-3 h-3 rounded-full mr-2"></span>${item.label}</span>`).join("")}
+        </div>
+      </div>
+      ${buildLineChart({ series: forecastSeries, actualHighF })}
     </section>
   `;
 }
