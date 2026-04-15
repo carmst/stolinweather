@@ -41,6 +41,18 @@ async function loadLandingTicker() {
   const root = document.querySelector("#landing-market-ticker");
   if (!root) return;
 
+  root.innerHTML = new Array(8)
+    .fill(null)
+    .map(
+      () => `
+        <div class="flex items-center gap-3 px-6 py-2 bg-surface-container-high rounded-full border border-white/5">
+          <span class="h-4 w-36 rounded-full bg-white/10 animate-pulse"></span>
+          <span class="h-4 w-20 rounded-full bg-primary/20 animate-pulse"></span>
+          <span class="material-symbols-outlined text-primary text-base animate-pulse">data_usage</span>
+        </div>
+      `
+    )
+    .join("");
   const response = await fetch("/api/dashboard");
   const dashboard = await response.json();
   const contracts = dashboard.contractViews?.allContracts || dashboard.contracts || [];

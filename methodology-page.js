@@ -1,6 +1,11 @@
 async function loadMethodology() {
   const root = document.querySelector("#methodology-root");
   if (!root) return;
+  window.StolinLoading?.show(root, {
+    title: "Loading methodology",
+    subtitle: "Collecting the current pipeline, feature stack, data sources, and model roadmap.",
+    context: "Model framework",
+  });
   const response = await fetch("/api/dashboard");
   const dashboard = await response.json();
 

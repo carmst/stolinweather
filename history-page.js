@@ -8,6 +8,18 @@ function formatHistoryDelta(forecast, actual) {
   return `${delta > 0 ? "+" : ""}${delta.toFixed(1)}F`;
 }
 
+function formatCompactNumber(value) {
+  return typeof value === "number" ? value.toLocaleString() : "--";
+}
+
+function formatHistoryPercent(value) {
+  return typeof value === "number" ? `${Math.round(value * 100)}%` : "--";
+}
+
+function formatHistoryEv(value) {
+  return typeof value === "number" ? `${value >= 0 ? "+" : ""}$${value.toFixed(2)}` : "--";
+}
+
 function sourceBadge(source) {
   if (source === "official") {
     return `<span class="font-label text-[10px] text-slate-500 px-2 py-1 border border-outline-variant rounded">OFFICIAL</span>`;
@@ -77,18 +89,19 @@ async function loadHistoryPage() {
 
   const existingSelect = document.querySelector("#history-days");
   const dayCount = existingSelect ? Number(existingSelect.value) : 5;
+  window.StolinLoading?.show(root, {
+    title: "Loading forecast history",
+    subtitle: "Pulling daily bets, model checkpoints, provider forecasts, and settlement highs.",
+    context: "Historical performance",
+  });
   const response = await fetch(`/api/history?days=${dayCount}`);
   const payload = await response.json();
   const rows = payload.rows || [];
+  const betStats = payload.betStats || {};
   const settledRows = rows.filter((row) => typeof row.actualHighF === "number");
-  const exactMatches = settledRows.filter((row) => typeof row.modelHighF === "number" && Math.abs(row.modelHighF - row.actualHighF) <= 2).length;
   const meanAbsError =
     settledRows.length > 0
       ? settledRows.reduce((sum, row) => sum + Math.abs((row.modelHighF || 0) - row.actualHighF), 0) / settledRows.length
-      : null;
-  const avgAlpha =
-    settledRows.length > 0
-      ? settledRows.reduce((sum, row) => sum + Math.abs((row.noaaHighF || row.modelHighF || 0) - (row.modelHighF || 0)), 0) / settledRows.length
       : null;
   const accuracyBars = buildAccuracyBars(settledRows);
   const cardRows = settledRows.slice(0, 4);
@@ -96,33 +109,36 @@ async function loadHistoryPage() {
   root.innerHTML = `
     <section class="relative mb-16 rounded-3xl overflow-hidden min-h-[400px] flex flex-col justify-end p-12">
       <div class="absolute inset-0 z-0">
-        <div class="w-full h-full bg-[radial-gradient(circle_at_20%_20%,rgba(109,235,253,0.15),transparent_20%),radial-gradient(circle_at_80%_30%,rgba(255,115,72,0.12),transparent_25%),linear-gradient(160deg,#0b1317,#070f12)] opacity-90"></div>
-        <div class="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent"></div>
+        <div
+          class="w-full h-full bg-cover bg-center opacity-45 grayscale"
+          style="background-image:url('https://lh3.googleusercontent.com/aida-public/AB6AXuA-8wGxAeQ7C_v-Q9WQMYZLAWSwbne7DMcMi6WsqwZnOYzUk3CqiHqTy793l1oMdwmuJGjdVr3z65i3A1S7zy-_6fNXvowvdSrouqNHIfC2Lnzyt75QgRUWghQi5rAW7p6IqNDDuxg5jmn7AAS_27edIZtWICaAak1iKEQyvrn8MrIAK-1dN_bK2QmiYVX6-uj6Q9Tk9WmuHOKvWFDiGTnfLiFX1bh9BdNltBYPBaZALs0NdUXAiMa4176_Cz9HuFkLdMY69iu-ZNw')"
+        ></div>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(109,235,253,0.22),transparent_28%),linear-gradient(180deg,rgba(7,15,18,0.18),#070f12_95%)]"></div>
       </div>
       <div class="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-8">
         <div class="glass-panel p-8 rounded-2xl border border-white/5">
           <div class="flex items-center gap-3 mb-2">
             <span class="material-symbols-outlined text-primary">analytics</span>
-            <span class="font-label text-xs uppercase tracking-widest text-slate-400">Settled Market-Days</span>
+            <span class="font-label text-xs uppercase tracking-widest text-slate-400">Daily Bets Logged</span>
           </div>
-          <div class="text-5xl font-black font-headline text-on-surface text-glow">${settledRows.length}</div>
-          <div class="mt-2 text-primary text-sm font-label">${payload.dataBackend}</div>
+          <div class="text-5xl font-black font-headline text-on-surface text-glow">${formatCompactNumber(betStats.totalBets)}</div>
+          <div class="mt-2 text-primary text-sm font-label">${betStats.source || payload.dataBackend}</div>
         </div>
         <div class="glass-panel p-8 rounded-2xl border border-white/5">
           <div class="flex items-center gap-3 mb-2">
             <span class="material-symbols-outlined text-secondary">verified</span>
-            <span class="font-label text-xs uppercase tracking-widest text-slate-400">Within 2°F</span>
+            <span class="font-label text-xs uppercase tracking-widest text-slate-400">Win Percentage</span>
           </div>
-          <div class="text-5xl font-black font-headline text-on-surface text-glow">${settledRows.length ? `${Math.round((exactMatches / settledRows.length) * 100)}%` : "--"}</div>
-          <div class="mt-2 text-secondary text-sm font-label">Morning checkpoint hit rate</div>
+          <div class="text-5xl font-black font-headline text-on-surface text-glow">${formatHistoryPercent(betStats.winPercentage)}</div>
+          <div class="mt-2 text-secondary text-sm font-label">${formatCompactNumber(betStats.wins)} wins / ${formatCompactNumber(betStats.resolvedBets)} resolved</div>
         </div>
         <div class="glass-panel p-8 rounded-2xl border border-white/5">
           <div class="flex items-center gap-3 mb-2">
             <span class="material-symbols-outlined text-primary">trending_up</span>
-            <span class="font-label text-xs uppercase tracking-widest text-slate-400">Average NOAA Gap</span>
+            <span class="font-label text-xs uppercase tracking-widest text-slate-400">Average EV</span>
           </div>
-          <div class="text-5xl font-black font-headline text-on-surface text-glow">${avgAlpha == null ? "--" : `${avgAlpha.toFixed(1)}F`}</div>
-          <div class="mt-2 text-primary text-sm font-label">Model vs baseline spread</div>
+          <div class="text-5xl font-black font-headline text-on-surface text-glow">${formatHistoryEv(betStats.averageEv)}</div>
+          <div class="mt-2 text-primary text-sm font-label">Per logged contract</div>
         </div>
       </div>
     </section>

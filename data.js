@@ -9,6 +9,7 @@ function runtimeDataPath(...segments) {
 
 const kalshiLatestPath = runtimeDataPath("kalshi", "latest_markets.json");
 const modelLatestPath = runtimeDataPath("models", "latest_scored_markets.json");
+const forecastDriftLatestPath = runtimeDataPath("models", "latest_forecast_drift.json");
 const noaaHistoryLatestPath = runtimeDataPath("history", "latest_noaa_history.json");
 const preliminaryHighsLatestPath = runtimeDataPath("preliminary", "latest_preliminary_daily_highs.json");
 const openMeteoLatestForecastsPath = runtimeDataPath("weather", "latest_forecasts.json");
@@ -18,6 +19,8 @@ const trackedMarketsPath = path.join(__dirname, "config", "tracked_markets.json"
 const manualWatchlistPath = path.join(__dirname, "config", "watchlist.json");
 const weatherSnapshotsDir = path.join(__dirname, "output", "weather", "snapshots");
 const modelSnapshotsDir = path.join(__dirname, "output", "models", "snapshots");
+const betsOutputDir = path.join(__dirname, "output", "bets");
+const preliminaryObservationsDir = runtimeDataPath("preliminary", "observations");
 const HISTORY_CHECKPOINT_HOUR_LOCAL = 8;
 const databaseUrl = process.env.DATABASE_URL;
 let databasePool = null;
@@ -799,6 +802,65 @@ function buildLocalHistoryPayload(dayCount = 5) {
   };
 }
 
+function readJsonFile(filePath) {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getLocalDailyBetFiles() {
+  const filesByDate = new Map();
+  const addFiles = (subdir, priority) => {
+    const dir = path.join(betsOutputDir, subdir);
+    if (!fs.existsSync(dir)) {
+      return;
+    }
+    for (const entry of fs.readdirSync(dir)) {
+      if (!/^\d{4}-\d{2}-\d{2}\.json$/.test(entry)) {
+        continue;
+      }
+      const date = entry.slice(0, 10);
+      const existing = filesByDate.get(date);
+      if (!existing || priority > existing.priority) {
+        filesByDate.set(date, { filePath: path.join(dir, entry), priority });
+      }
+    }
+  };
+
+  addFiles("snapshots", 1);
+  addFiles("resolved", 2);
+  return [...filesByDate.values()].map((entry) => entry.filePath);
+}
+
+function buildLocalBetStats() {
+  const bets = [];
+  for (const filePath of getLocalDailyBetFiles()) {
+    const payload = readJsonFile(filePath);
+    if (Array.isArray(payload?.bets)) {
+      bets.push(...payload.bets);
+    }
+  }
+
+  const resolved = bets.filter((bet) => typeof bet.bet_won === "boolean");
+  const evValues = bets
+    .map((bet) => bet.expected_value)
+    .filter((value) => typeof value === "number");
+  return {
+    totalBets: bets.length,
+    resolvedBets: resolved.length,
+    wins: resolved.filter((bet) => bet.bet_won === true).length,
+    winPercentage: resolved.length
+      ? resolved.filter((bet) => bet.bet_won === true).length / resolved.length
+      : null,
+    averageEv: evValues.length
+      ? evValues.reduce((sum, value) => sum + value, 0) / evValues.length
+      : null,
+    source: "local-json",
+  };
+}
+
 async function queryJsonFromDb(sql) {
   const pool = getDatabasePool();
   if (!pool) {
@@ -1202,6 +1264,50 @@ order by b.location asc, b.summary_date desc;
       dayCount,
       rows,
       markets,
+    };
+  } catch (_error) {
+    lastDbDebugReason = _error && _error.message ? _error.message : "Unknown DB error";
+    return null;
+  }
+}
+
+async function queryDailyBetStatsFromDb() {
+  if (!databaseUrl) {
+    lastDbDebugReason = "DATABASE_URL not set";
+    return null;
+  }
+
+  const pool = getDatabasePool();
+  if (!pool) {
+    lastDbDebugReason = "DATABASE_URL not set";
+    return null;
+  }
+
+  const sql = `
+select
+  count(*)::int as total_bets,
+  count(*) filter (where bet_won is not null)::int as resolved_bets,
+  count(*) filter (where bet_won is true)::int as wins,
+  avg(expected_value)::float8 as average_ev
+from app.daily_bets;
+`;
+
+  try {
+    const result = await pool.query(sql);
+    const row = result.rows?.[0];
+    if (!row) {
+      return null;
+    }
+    const totalBets = Number(row.total_bets || 0);
+    const resolvedBets = Number(row.resolved_bets || 0);
+    const wins = Number(row.wins || 0);
+    return {
+      totalBets,
+      resolvedBets,
+      wins,
+      winPercentage: resolvedBets ? wins / resolvedBets : null,
+      averageEv: row.average_ev == null ? null : Number(row.average_ev),
+      source: "postgres",
     };
   } catch (_error) {
     lastDbDebugReason = _error && _error.message ? _error.message : "Unknown DB error";
@@ -1723,6 +1829,7 @@ function buildNormalizedContract(market, modelProb, edge, pricing, confidenceSco
 
   return {
     ticker: market.ticker || null,
+    pulledAt: market.pulled_at || null,
     eventTicker: market.event_ticker || null,
     seriesTicker: market.series_ticker || null,
     marketId: market.weather_market_id || market.market_id || null,
@@ -2290,7 +2397,10 @@ async function buildWatchlistView() {
 }
 
 async function buildHistoryView(dayCount = 5) {
-  const liveHistory = await queryHistoryPayloadFromDb(dayCount);
+  const [liveHistory, liveBetStats] = await Promise.all([
+    queryHistoryPayloadFromDb(dayCount),
+    queryDailyBetStatsFromDb(),
+  ]);
   const payload = liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0
     ? liveHistory
     : buildLocalHistoryPayload(dayCount);
@@ -2298,6 +2408,7 @@ async function buildHistoryView(dayCount = 5) {
     updatedAt: new Date().toISOString(),
     dataBackend: liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0 ? "postgres" : "static-json",
     dataBackendReason: liveHistory && Array.isArray(liveHistory.rows) && liveHistory.rows.length > 0 ? null : lastDbDebugReason,
+    betStats: liveBetStats || buildLocalBetStats(),
     ...payload,
   };
 }
@@ -2342,6 +2453,7 @@ function normalizedContractToMarketSelection(contract) {
     floor_strike: contract.floorStrike,
     cap_strike: contract.capStrike,
     adjusted_forecast_max_f: contract.adjustedForecastMaxF,
+    pulled_at: contract.pulledAt,
     forecast_max_f: contract.forecastMaxF,
     noaa_forecast_max_f: contract.noaaForecastMaxF,
     open_meteo_forecast_max_f: contract.openMeteoForecastMaxF,
@@ -2418,6 +2530,17 @@ function readModelSnapshotPoints({ ticker, forecastDate }) {
     .sort((left, right) => new Date(left.pulledAt) - new Date(right.pulledAt));
 }
 
+function readCompactForecastDriftPoints({ ticker, forecastDate }) {
+  const payload = loadJsonFile(forecastDriftLatestPath);
+  const series = payload?.series || {};
+  const points = series[`${ticker}|${forecastDate}`] || [];
+  return Array.isArray(points)
+    ? points
+      .filter((point) => point.pulledAt)
+      .sort((left, right) => new Date(left.pulledAt) - new Date(right.pulledAt))
+    : [];
+}
+
 function normalizeLocationKey(value) {
   return String(value || "")
     .toLowerCase()
@@ -2457,6 +2580,7 @@ function dateTimePartsForZone(date, timezone) {
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
+    minute: "2-digit",
     hour12: false,
   }).formatToParts(date);
   const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
@@ -2466,7 +2590,7 @@ function dateTimePartsForZone(date, timezone) {
   }
   return {
     dateKey: `${byType.year}-${byType.month}-${byType.day}`,
-    hour,
+    hour: hour + Number(byType.minute || 0) / 60,
   };
 }
 
@@ -2593,6 +2717,37 @@ function readLatestHourlyProviderPaths({ marketId, location, forecastDate }) {
   return [...latestByProvider.values()].sort((left, right) => left.provider.localeCompare(right.provider));
 }
 
+function readActualObservationPoints({ marketId, forecastDate }) {
+  if (!marketId || !forecastDate) {
+    return [];
+  }
+
+  const observationsPath = path.join(preliminaryObservationsDir, `${forecastDate}.jsonl`);
+  if (!fs.existsSync(observationsPath)) {
+    return [];
+  }
+
+  const byObservedAt = new Map();
+  for (const row of loadJsonLines(observationsPath)) {
+    if (row.market_id !== marketId || row.observation_date !== forecastDate) {
+      continue;
+    }
+    if (!row.observed_at || typeof row.observed_temp_f !== "number") {
+      continue;
+    }
+    const localParts = dateTimePartsForZone(new Date(row.observed_at), row.timezone || "America/New_York");
+    byObservedAt.set(row.observed_at, {
+      time: row.observed_at,
+      localHour: typeof localParts?.hour === "number" ? localParts.hour : null,
+      temperatureF: row.observed_temp_f,
+      pulledAt: row.pulled_at || null,
+      provider: row.provider || "noaa-nws-current-observation",
+    });
+  }
+
+  return [...byObservedAt.values()].sort((left, right) => Date.parse(left.time) - Date.parse(right.time));
+}
+
 function hourlyProviderDiagnostics({ marketId, location, forecastDate }) {
   const latestPaths = [
     ["noaa-nws", noaaLatestForecastsPath],
@@ -2613,9 +2768,9 @@ function hourlyProviderDiagnostics({ marketId, location, forecastDate }) {
 }
 
 async function buildMarketDetailView({ ticker, days = 5 } = {}) {
-  let selection = pickMarketDetailSelection(ticker);
+  let selection = await pickMarketDetailSelectionFromDashboard(ticker);
   if (!selection) {
-    selection = await pickMarketDetailSelectionFromDashboard(ticker);
+    selection = pickMarketDetailSelection(ticker);
   }
   if (!selection) {
     return {
@@ -2632,6 +2787,9 @@ async function buildMarketDetailView({ ticker, days = 5 } = {}) {
   const forecastDate = selection.forecast_date;
   const marketId = selection.weather_market_id;
   const series = readModelSnapshotPoints({ ticker: selection.ticker, forecastDate });
+  if (!series.length) {
+    series.push(...readCompactForecastDriftPoints({ ticker: selection.ticker, forecastDate }));
+  }
   if (!series.length) {
     series.push({
       pulledAt: selection.pulled_at || new Date().toISOString(),
@@ -2682,6 +2840,7 @@ async function buildMarketDetailView({ ticker, days = 5 } = {}) {
       kalshiUrl: buildKalshiUrl(selection),
       latestModelHighF:
         typeof selection.adjusted_forecast_max_f === "number" ? selection.adjusted_forecast_max_f : null,
+      latestPulledAt: selection.pulled_at || null,
       latestModelProb:
         typeof selection.model_probability === "number" ? selection.model_probability : null,
       latestExpectedValue:
@@ -2693,6 +2852,7 @@ async function buildMarketDetailView({ ticker, days = 5 } = {}) {
     },
     series,
     hourlyProviders,
+    actualObservations: readActualObservationPoints({ marketId, forecastDate }),
     hourlyProviderDiagnostics:
       hourlyProviders.length === 0
         ? hourlyProviderDiagnostics({ marketId, location: selection.matched_location, forecastDate })

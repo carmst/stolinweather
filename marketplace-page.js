@@ -221,6 +221,11 @@ async function loadMarketplace() {
   const root = document.querySelector("#marketplace-root");
   if (!root) return;
 
+  window.StolinLoading?.show(root, {
+    title: "Loading marketplace",
+    subtitle: "Pulling every available temperature contract, model score, EV, and live Kalshi price.",
+    context: "Marketplace feed",
+  });
   const response = await fetch("/api/dashboard");
   const dashboard = await response.json();
   const contracts = dashboard.contractViews?.allContracts || dashboard.contracts || [];

@@ -250,6 +250,11 @@ function renderWatchlist(root, payload) {
 async function loadWatchlist() {
   const root = document.querySelector("#watchlist-root");
   if (!root) return;
+  window.StolinLoading?.show(root, {
+    title: "Loading watchlist",
+    subtitle: "Finding the model-high matching contract for each tracked city and ranking by EV.",
+    context: "Watchlist scan",
+  });
   const response = await fetch("/api/watchlist");
   const payload = await response.json();
   renderWatchlist(root, payload);

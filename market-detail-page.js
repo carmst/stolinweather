@@ -17,6 +17,12 @@ function formatTime(value) {
   return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function formatAxisTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" });
+}
+
 function linePath(points, xFor, yFor) {
   return points
     .map((point, index) => `${index === 0 ? "M" : "L"} ${xFor(point, index).toFixed(2)} ${yFor(point).toFixed(2)}`)
@@ -40,7 +46,15 @@ function buildHourlyEmptyState(diagnostics) {
   `;
 }
 
-function buildLineChart({ series, actualHighF, height = 340, xMode = "time", diagnostics = null }) {
+function buildLineChart({
+  series,
+  actualHighF,
+  height = 340,
+  xMode = "time",
+  diagnostics = null,
+  currentLocalHour = null,
+  showFlatActual = false,
+}) {
   const width = 1000;
   const padding = { top: 28, right: 28, bottom: 42, left: 54 };
   const hasProviderPoints = series.some((item) => item.points.length);
@@ -88,7 +102,17 @@ function buildLineChart({ series, actualHighF, height = 340, xMode = "time", dia
     return padding.left + position * (width - padding.left - padding.right);
   };
   const yFor = (point) => padding.top + ((maxValue - point.value) / domain) * (height - padding.top - padding.bottom);
-  const actualY = typeof actualHighF === "number" ? padding.top + ((maxValue - actualHighF) / domain) * (height - padding.top - padding.bottom) : null;
+  const actualY =
+    showFlatActual && typeof actualHighF === "number"
+      ? padding.top + ((maxValue - actualHighF) / domain) * (height - padding.top - padding.bottom)
+      : null;
+  const currentX =
+    xMode === "localHour" &&
+    typeof currentLocalHour === "number" &&
+    currentLocalHour >= minXValue &&
+    currentLocalHour <= maxXValue
+      ? padding.left + ((currentLocalHour - minXValue) / xValueDomain) * (width - padding.left - padding.right)
+      : null;
 
   return `
     <svg viewBox="0 0 ${width} ${height}" class="w-full h-[360px] overflow-visible">
@@ -119,14 +143,33 @@ function buildLineChart({ series, actualHighF, height = 340, xMode = "time", dia
             }).join("")
           : ""
       }
+      ${
+        xMode === "time" && minTime != null && maxTime != null
+          ? [minTime, minTime + (maxTime - minTime) / 2, maxTime].map((time) => {
+              const x = padding.left + ((time - minTime) / timeDomain) * (width - padding.left - padding.right);
+              return `<line x1="${x}" y1="${height - padding.bottom}" x2="${x}" y2="${height - padding.bottom + 7}" stroke="rgba(255,255,255,0.18)" />
+                <text x="${x}" y="${height - 12}" fill="#6e777a" font-size="15" text-anchor="middle">${formatAxisTime(time)}</text>`;
+            }).join("")
+          : ""
+      }
+      ${
+        currentX == null
+          ? ""
+          : `<line x1="${currentX}" y1="${padding.top}" x2="${currentX}" y2="${height - padding.bottom}" stroke="#ff7348" stroke-width="1.5" opacity="0.48" />
+             <text x="${currentX + 8}" y="${padding.top + 18}" fill="#ff7348" font-size="14" opacity="0.75">now</text>`
+      }
       ${series
         .filter((item) => item.points.length)
         .map(
           (item) => `
             <path d="${linePath(item.points, xFor, yFor)}" fill="none" stroke="${item.color}" stroke-width="${item.strokeWidth || 4}" stroke-linecap="round" stroke-linejoin="round" opacity="${item.opacity || 1}" ${item.dash ? `stroke-dasharray="${item.dash}"` : ""}></path>
-            ${item.points
-              .map((point, index) => `<circle cx="${xFor(point, index)}" cy="${yFor(point)}" r="${item.pointRadius || 4}" fill="${item.color}"><title>${item.label}: ${formatTemp(point.value)} at ${xMode === "localHour" && typeof point.localHour === "number" ? `${point.localHour}:00 local` : formatTime(point.time)}</title></circle>`)
-              .join("")}
+            ${
+              item.pointRadius === 0
+                ? ""
+                : item.points
+                    .map((point, index) => `<circle cx="${xFor(point, index)}" cy="${yFor(point)}" r="${item.pointRadius || 4}" fill="${item.color}"><title>${item.label}: ${formatTemp(point.value)} at ${xMode === "localHour" && typeof point.localHour === "number" ? `${point.localHour}:00 local` : formatTime(point.time)}</title></circle>`)
+                    .join("")
+            }
           `
         )
         .join("")}
@@ -144,6 +187,7 @@ function providerLabel(provider) {
 function buildForecastSeries(points) {
   return [
     { key: "modelHighF", label: "Stolin Model", color: "#ff7348", strokeWidth: 5 },
+    { key: "forecastMaxF", label: "Blended Max", color: "#6debfd", opacity: 0.85, strokeWidth: 4 },
     { key: "noaaHighF", label: "NOAA", color: "#f0f8fc", opacity: 0.5, strokeWidth: 3 },
     { key: "openMeteoHighF", label: "Open-Meteo", color: "#a4acb0", opacity: 0.55, strokeWidth: 3 },
     { key: "visualCrossingHighF", label: "Visual Crossing", color: "#93f1fd", opacity: 0.55, strokeWidth: 3 },
@@ -174,6 +218,24 @@ function buildHourlySeries(hourlyProviders) {
   }));
 }
 
+function buildActualObservationSeries(points) {
+  if (!Array.isArray(points) || !points.length) {
+    return null;
+  }
+  return {
+    label: "Actual Observed",
+    color: "#f0f8fc",
+    opacity: 0.9,
+    strokeWidth: 4,
+    pointRadius: 0,
+    points: points.map((point) => ({
+      time: point.time,
+      localHour: point.localHour,
+      value: point.temperatureF,
+    })),
+  };
+}
+
 function addModelTargetSeries(series, modelHighF) {
   if (typeof modelHighF !== "number") {
     return series;
@@ -192,6 +254,7 @@ function addModelTargetSeries(series, modelHighF) {
       color: "#ff7348",
       opacity: 1,
       strokeWidth: 5,
+      dash: "10 8",
       pointRadius: 0,
       points: [
         { time: times[0], localHour: 0, value: modelHighF },
@@ -200,6 +263,34 @@ function addModelTargetSeries(series, modelHighF) {
     },
     ...series,
   ];
+}
+
+function currentLocalHourForDate(forecastDate, timezone) {
+  if (!forecastDate || !timezone) {
+    return null;
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const dateKey = `${byType.year}-${byType.month}-${byType.day}`;
+  if (dateKey !== forecastDate) {
+    return null;
+  }
+
+  const hour = Number(byType.hour) === 24 ? 0 : Number(byType.hour);
+  const minute = Number(byType.minute);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    return null;
+  }
+  return hour + minute / 60;
 }
 
 function statCard(label, value, subtle, colorClass = "text-primary") {
@@ -216,6 +307,11 @@ async function loadMarketDetail() {
   const root = document.querySelector("#market-detail-root");
   if (!root) return;
 
+  window.StolinLoading?.show(root, {
+    title: "Loading market detail",
+    subtitle: "Building the hourly day shape and forecast drift for this exact Kalshi contract.",
+    context: "Contract diagnostics",
+  });
   const params = new URLSearchParams(window.location.search);
   const response = await fetch(`/api/market-detail?${params.toString()}`);
   const payload = await response.json();
@@ -227,7 +323,14 @@ async function loadMarketDetail() {
 
   const actualHighF = payload.actual?.actualHighF ?? null;
   const forecastSeries = buildForecastSeries(payload.series || []);
-  const hourlySeries = addModelTargetSeries(buildHourlySeries(payload.hourlyProviders || []), market.latestModelHighF);
+  const providerHourlySeries = buildHourlySeries(payload.hourlyProviders || []);
+  const actualObservationSeries = buildActualObservationSeries(payload.actualObservations || []);
+  const hourlySeries = addModelTargetSeries(
+    actualObservationSeries ? [actualObservationSeries, ...providerHourlySeries] : providerHourlySeries,
+    market.latestModelHighF
+  );
+  const chartTimezone = payload.hourlyProviders?.find((provider) => provider.timezone)?.timezone;
+  const currentLocalHour = currentLocalHourForDate(market.forecastDate, chartTimezone);
   const latestPoint = [...(payload.series || [])].reverse().find((point) => typeof point.modelHighF === "number");
   const latestEv = market.latestExpectedValue;
   const pathText =
@@ -252,7 +355,7 @@ async function loadMarketDetail() {
     </section>
 
     <section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10">
-      ${statCard("Latest Model High", formatTemp(market.latestModelHighF), latestPoint ? `Updated ${formatTime(latestPoint.pulledAt)}` : "No model point")}
+      ${statCard("Latest Model High", formatTemp(market.latestModelHighF), market.latestPulledAt ? `Updated ${formatTime(market.latestPulledAt)}` : latestPoint ? `Updated ${formatTime(latestPoint.pulledAt)}` : "No model point")}
       ${statCard("YES Probability", formatPercent(market.latestModelProb), "Current pressure-adjusted model probability", "text-secondary")}
       ${statCard("YES EV", formatCurrency(latestEv), "YES-only expected value", typeof latestEv === "number" && latestEv >= 0 ? "text-primary" : "text-secondary")}
       ${statCard("Hourly Path", pathText, "Provider-hour pressure against this bucket")}
@@ -268,7 +371,13 @@ async function loadMarketDetail() {
           ${hourlySeries.map((item) => `<span><span style="background:${item.color}" class="inline-block w-3 h-3 rounded-full mr-2"></span>${item.label}</span>`).join("")}
         </div>
       </div>
-      ${buildLineChart({ series: hourlySeries, actualHighF, xMode: "localHour", diagnostics: payload.hourlyProviderDiagnostics })}
+      ${buildLineChart({
+        series: hourlySeries,
+        actualHighF,
+        xMode: "localHour",
+        diagnostics: payload.hourlyProviderDiagnostics,
+        currentLocalHour,
+      })}
     </section>
 
     <section class="glass-panel rounded-3xl p-6 md:p-8 border border-white/5 mb-10">
