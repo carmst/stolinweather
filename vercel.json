@@ -3,6 +3,10 @@
   "framework": null,
   "cleanUrls": true,
   "functions": {
+    "api/django.py": {
+      "includeFiles": "{django_app/**,deploy_data/**,config/*.json}",
+      "maxDuration": 30
+    },
     "api/dashboard.js": {
       "includeFiles": "{config/*.json,deploy_data/**}"
     },
@@ -15,5 +19,31 @@
     "api/market-detail.js": {
       "includeFiles": "{config/*.json,deploy_data/**}"
     }
-  }
+  },
+  "routes": [
+    {
+      "src": "/static/(.*)",
+      "dest": "/django_app/static/$1"
+    },
+    {
+      "src": "/api/dashboard",
+      "dest": "/api/dashboard.js"
+    },
+    {
+      "src": "/api/history",
+      "dest": "/api/history.js"
+    },
+    {
+      "src": "/api/watchlist",
+      "dest": "/api/watchlist.js"
+    },
+    {
+      "src": "/api/market-detail",
+      "dest": "/api/market-detail.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/django.py"
+    }
+  ]
 }

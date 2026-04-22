@@ -14,7 +14,8 @@ from urllib.parse import parse_qs, urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 REPO_DIR = BASE_DIR.parent
-LOG_DIR = BASE_DIR / "logs"
+IS_VERCEL = os.environ.get("VERCEL") == "1"
+LOG_DIR = Path("/tmp/stolin-django-logs") if IS_VERCEL else BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 
 
@@ -39,7 +40,7 @@ SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "local-dev-only-change-before-p
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") != "0"
 ALLOWED_HOSTS = [
     host.strip()
-    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,testserver").split(",")
+    for host in os.environ.get("DJANGO_ALLOWED_HOSTS", "127.0.0.1,localhost,testserver,.vercel.app").split(",")
     if host.strip()
 ]
 
@@ -116,7 +117,7 @@ DATABASES = {
     # setup from writing framework tables into the production Supabase database.
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "django_control_room.sqlite3",
+        "NAME": Path("/tmp/django_control_room.sqlite3") if IS_VERCEL else BASE_DIR / "django_control_room.sqlite3",
     },
     # Existing weather/Kalshi pipeline tables live in Supabase/Postgres.
     "weather": database_from_url(os.environ.get("DATABASE_URL")),
