@@ -6,6 +6,7 @@ venv
 env
 __pycache__
 *.pyc
+api/auth-config.js
 
 # Django owns production routes now. Keep legacy static pages out of the
 # Vercel filesystem so they do not beat the Django rewrite.
