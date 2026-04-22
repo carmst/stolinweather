@@ -32,7 +32,7 @@
           </div>
           <h1 class="text-5xl font-headline font-extrabold tracking-tight text-on-surface">Watchlist</h1>
           <p class="text-on-surface-variant mt-4 max-w-2xl text-lg leading-relaxed">
-            One model-high matching contract per watched city, ranked by current YES EV.
+            One best {{ side_display }} contract per watched city, ranked by current model EV.
           </p>
           <p class="text-on-surface-variant mt-3 text-xs font-label uppercase tracking-widest">
             {{ row_count }} selected from {{ candidate_count }} candidates{% if updated_at %} · updated {{ updated_at|date:"M j, g:i A" }}{% endif %}
@@ -40,8 +40,12 @@
         </div>
         <div class="flex flex-wrap gap-3">
           <div class="bg-surface-container-high rounded-xl p-1 flex gap-1">
-            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if day == 'today' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/watchlist/?day=today">Today</a>
-            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if day == 'tomorrow' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/watchlist/?day=tomorrow">Tomorrow</a>
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if day == 'today' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/watchlist/?day=today&side={{ side }}">Today</a>
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if day == 'tomorrow' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/watchlist/?day=tomorrow&side={{ side }}">Tomorrow</a>
+          </div>
+          <div class="bg-surface-container-high rounded-xl p-1 flex gap-1">
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if side == 'yes' %}bg-secondary text-on-secondary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/watchlist/?day={{ day }}&side=yes">YES</a>
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if side == 'no' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/watchlist/?day={{ day }}&side=no">NO</a>
           </div>
         </div>
       </div>
@@ -52,12 +56,12 @@
           <div class="text-2xl font-headline font-extrabold mt-2">{{ active_date }}</div>
         </div>
         <div class="glass-card rounded-2xl border border-white/5 p-5">
-          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Avg YES Probability</div>
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Avg {{ side_display }} Probability</div>
           <div class="text-2xl font-headline font-extrabold mt-2 text-primary">{{ avg_probability_display }}</div>
         </div>
         <div class="glass-card rounded-2xl border border-white/5 p-5">
-          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Positive YES EV</div>
-          <div class="text-2xl font-headline font-extrabold mt-2 text-secondary">{{ positive_yes_count }}</div>
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Positive {{ side_display }} EV</div>
+          <div class="text-2xl font-headline font-extrabold mt-2 text-secondary">{{ positive_side_count }}</div>
         </div>
         <div class="glass-card rounded-2xl border border-primary/20 p-5">
           <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Backtested Edge</div>
@@ -72,15 +76,15 @@
             <thead>
               <tr class="bg-surface-container/60">
                 <th class="px-8 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Market</th>
-                <th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Odds</th>
-                <th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline text-center">YES Probability</th>
+                <th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Entry</th>
+                <th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline text-center">{{ side_display }} Probability</th>
                 <th class="px-6 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline">Model Match</th>
                 <th class="px-8 py-5 text-[10px] font-label font-bold uppercase tracking-widest text-outline text-right">Actions</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-white/5">
               {% for row in rows %}
-                <tr class="group hover:bg-white/5 transition-colors {% if row.is_high_confidence_watchlist %}{% if row.theme == 'low' %}watchlist-edge-row-primary{% else %}watchlist-edge-row-secondary{% endif %}{% endif %}">
+                <tr class="group hover:bg-white/5 transition-colors {% if row.selected_side_has_backtested_edge %}{% if row.theme == 'low' %}watchlist-edge-row-primary{% else %}watchlist-edge-row-secondary{% endif %}{% endif %}">
                   <td class="px-8 py-6">
                     <div class="flex items-center gap-4">
                       <div class="w-10 h-10 rounded-lg bg-surface-container-highest flex items-center justify-center {% if row.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">
@@ -89,7 +93,7 @@
                       <div>
                         <span class="block font-headline font-bold text-on-surface">
                           {{ row.location }}: {{ row.contract_label }}
-                          {% if row.is_high_confidence_watchlist %}
+                          {% if row.selected_side_has_backtested_edge %}
                             <span class="ml-2 inline-block rounded border {% if row.theme == 'low' %}border-primary/30 bg-primary/10 text-primary{% else %}border-secondary/20 bg-secondary/10 text-secondary{% endif %} px-2 py-1 align-middle text-[10px] font-label uppercase tracking-widest">Edge</span>
                           {% endif %}
                         </span>
@@ -99,22 +103,22 @@
                   </td>
                   <td class="px-6 py-6">
                     <div class="flex flex-col">
-                      <span class="text-lg font-headline font-extrabold text-on-surface">{{ row.yes_cost_display }}</span>
-                      <span class="text-[10px] font-label text-outline uppercase tracking-tighter">Market {{ row.market_probability_display }}</span>
+                      <span class="text-lg font-headline font-extrabold text-on-surface">{{ row.selected_side_cost_display }}</span>
+                      <span class="text-[10px] font-label text-outline uppercase tracking-tighter">{{ side_display }} side</span>
                     </div>
                   </td>
                   <td class="px-6 py-6">
                     <div class="flex flex-col items-center">
-                      <span class="text-xl font-headline font-black {% if row.yes_ev and row.yes_ev > 0 %}text-secondary{% else %}text-primary{% endif %}">{{ row.model_probability_display }}</span>
-                      <span class="text-[10px] font-label text-outline uppercase tracking-tighter">{{ row.action_label }}</span>
+                      <span class="text-xl font-headline font-black {% if row.selected_side_ev and row.selected_side_ev > 0 %}text-secondary{% else %}text-primary{% endif %}">{{ row.selected_side_probability_display }}</span>
+                      <span class="text-[10px] font-label text-outline uppercase tracking-tighter">{{ row.selected_side_action_label }}</span>
                       <div class="w-24 h-1 bg-surface-container-highest rounded-full mt-2 overflow-hidden">
-                        <div class="h-full {% if row.yes_ev and row.yes_ev > 0 %}bg-secondary{% else %}bg-primary{% endif %}" style="width: {{ row.model_probability_width }}%"></div>
+                        <div class="h-full {% if row.selected_side_ev and row.selected_side_ev > 0 %}bg-secondary{% else %}bg-primary{% endif %}" style="width: {{ row.selected_side_probability_width }}%"></div>
                       </div>
                     </div>
                   </td>
                   <td class="px-6 py-6">
-                    <div class="flex items-center gap-2 {% if row.yes_ev and row.yes_ev > 0 %}text-secondary{% else %}text-on-surface-variant{% endif %}">
-                      <span class="text-xs font-label font-semibold">{{ row.yes_ev_display }} EV</span>
+                    <div class="flex items-center gap-2 {% if row.selected_side_ev and row.selected_side_ev > 0 %}text-secondary{% else %}text-on-surface-variant{% endif %}">
+                      <span class="text-xs font-label font-semibold">{{ row.selected_side_ev_display }} EV</span>
                     </div>
                     <p class="text-[11px] text-outline mt-2 max-w-[260px]">
                       Model high {{ row.model_high_display }} · floor {{ row.model_high_floored|default:"--" }}{% if row.model_high_settlement_band %} · {{ row.model_high_settlement_band }}{% endif %}
@@ -146,7 +150,7 @@
       <section class="mt-10 glass-card rounded-2xl border border-white/5 p-6">
         <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Configured Focus</div>
         <p class="mt-3 text-on-surface-variant">
-          The table shows one model-high match per active city. Configured focus locations: {{ watchlist_locations|join:", " }}{% if watchlist_tickers %} · Tickers: {{ watchlist_tickers|join:", " }}{% endif %}
+          The table shows one best {{ side_display }} contract per active city. Configured focus locations: {{ watchlist_locations|join:", " }}{% if watchlist_tickers %} · Tickers: {{ watchlist_tickers|join:", " }}{% endif %}
         </p>
       </section>
     </main>

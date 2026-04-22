@@ -22,6 +22,7 @@
         </div>
         <form class="relative hidden lg:block" method="get" action="/marketplace/">
           <input type="hidden" name="day" value="{{ day }}" />
+          <input type="hidden" name="side" value="{{ side }}" />
           <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm" aria-hidden="true">Search</span>
           <input
             class="bg-slate-950/50 border-none rounded-xl pl-16 pr-4 py-2 text-sm text-on-surface-variant focus:ring-1 focus:ring-primary w-64"
@@ -59,8 +60,8 @@
           <div class="text-2xl font-headline font-extrabold mt-2">{{ active_date }}</div>
         </div>
         <div class="glass-card rounded-2xl border border-white/5 p-5">
-          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Positive YES EV</div>
-          <div class="text-2xl font-headline font-extrabold mt-2 text-secondary">{{ positive_yes_count }}</div>
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Positive {{ side_display }} EV</div>
+          <div class="text-2xl font-headline font-extrabold mt-2 text-secondary">{{ positive_side_count }}</div>
         </div>
         <div class="glass-card rounded-2xl border border-white/5 p-5">
           <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Backtested Edge</div>
@@ -76,7 +77,7 @@
       {% if contracts %}
         <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
           {% for contract in contracts %}
-            <article class="glass-card rounded-3xl p-8 relative overflow-hidden group transition-all duration-500 border {% if contract.is_backtested_edge %}{% if contract.theme == 'low' %}marketplace-edge-card-primary border-primary/40{% else %}marketplace-edge-card-secondary border-secondary/40{% endif %}{% elif contract.theme == 'low' %}border-primary/20{% else %}border-secondary/20{% endif %}">
+            <article class="glass-card rounded-3xl p-8 relative overflow-hidden group transition-all duration-500 border {% if contract.selected_side_has_backtested_edge %}{% if contract.theme == 'low' %}marketplace-edge-card-primary border-primary/40{% else %}marketplace-edge-card-secondary border-secondary/40{% endif %}{% elif contract.theme == 'low' %}border-primary/20{% else %}border-secondary/20{% endif %}">
               <div class="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-100 transition-opacity">
                 <span class="text-xs font-label font-bold uppercase tracking-widest {% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">
                   {% if contract.theme == 'low' %}Low{% else %}High{% endif %}
@@ -88,13 +89,13 @@
                   <span class="text-xs font-label font-bold tracking-[0.2em] {% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %} uppercase mb-2 block">
                     {{ contract.lead_bucket|default:"Market" }}
                   </span>
-                  {% if contract.is_backtested_edge %}
+                  {% if contract.selected_side_has_backtested_edge %}
                     <div class="mb-3 inline-flex items-center gap-2 rounded border {% if contract.theme == 'low' %}border-primary/30 bg-primary/10 text-primary{% else %}border-secondary/30 bg-secondary/10 text-secondary{% endif %} px-3 py-1 text-[10px] font-label uppercase tracking-widest">
                       <span>Backtested Edge</span>
-                      <span>{{ contract.watchlist_side_display }}</span>
-                      <span>{{ contract.watchlist_side_probability_display }} model</span>
-                      <span>{{ contract.watchlist_side_cost_display }} entry</span>
-                      <span>{{ contract.watchlist_side_ev_display }} EV</span>
+                      <span>{{ contract.selected_side_display }}</span>
+                      <span>{{ contract.selected_side_probability_display }} model</span>
+                      <span>{{ contract.selected_side_cost_display }} entry</span>
+                      <span>{{ contract.selected_side_ev_display }} EV</span>
                     </div>
                   {% endif %}
                   <h3 class="text-3xl font-headline font-extrabold tracking-tight">{{ contract.location }}: {{ contract.contract_label }}</h3>
@@ -104,32 +105,58 @@
                 <div class="flex items-center justify-between">
                   <div class="flex flex-col">
                     <span class="text-[0.6rem] font-label text-on-surface-variant uppercase tracking-widest mb-1">
-                      {% if contract.is_backtested_edge %}Model {{ contract.watchlist_side_display }}{% else %}Stolin YES{% endif %}
+                      Model {{ contract.selected_side_display }}
                     </span>
                     <div class="text-5xl font-headline font-black {% if contract.theme == 'low' %}text-primary text-glow{% else %}text-secondary{% endif %} italic">
-                      {% if contract.is_backtested_edge %}{{ contract.watchlist_side_probability_display }}{% else %}{{ contract.model_probability_display }}{% endif %}
+                      {{ contract.selected_side_probability_display }}
                     </div>
                   </div>
                   <div class="w-px h-12 bg-outline-variant/30"></div>
                   <div class="flex flex-col items-end">
                     <span class="text-[0.6rem] font-label text-on-surface-variant uppercase tracking-widest mb-1">
-                      {% if contract.is_backtested_edge %}Entry Cost{% else %}Market YES{% endif %}
+                      Entry Cost
                     </span>
                     <div class="text-4xl font-headline font-bold text-on-surface">
-                      {% if contract.is_backtested_edge %}{{ contract.watchlist_side_cost_display }}{% else %}{{ contract.market_probability_display }}{% endif %}
+                      {{ contract.selected_side_cost_display }}
                     </div>
                   </div>
                 </div>
 
                 <div class="space-y-3">
-                  <div class="flex justify-between items-center text-[0.65rem] font-label uppercase tracking-widest text-on-surface-variant">
-                    {% if contract.is_backtested_edge %}
-                      <span>{{ contract.watchlist_side_display }} {{ contract.watchlist_side_cost_display }}</span>
-                      <span class="{% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">{{ contract.watchlist_side_ev_display }} EV</span>
-                    {% else %}
-                      <span>YES {{ contract.yes_cost_display }}</span>
-                      <span class="{% if contract.yes_ev and contract.yes_ev > 0 %}text-secondary{% else %}text-on-surface-variant{% endif %}">{{ contract.yes_ev_display }} EV</span>
-                    {% endif %}
+                  <div class="grid grid-cols-2 gap-3">
+                    <div class="rounded-lg border p-4 {% if contract.selected_side_is_yes %}{% if contract.theme == 'low' %}border-primary/40 bg-primary/10{% else %}border-secondary/40 bg-secondary/10{% endif %}{% else %}border-white/5 bg-surface-container/50{% endif %}">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-[0.65rem] font-label uppercase tracking-widest {% if contract.selected_side_is_yes %}{% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}{% else %}text-on-surface-variant{% endif %}">YES</span>
+                        {% if contract.selected_side_is_yes %}
+                          <span class="rounded border {% if contract.theme == 'low' %}border-primary/30 text-primary{% else %}border-secondary/30 text-secondary{% endif %} px-2 py-1 text-[10px] font-label uppercase tracking-widest">{% if contract.selected_side_has_backtested_edge %}Edge{% else %}Selected{% endif %}</span>
+                        {% endif %}
+                      </div>
+                      <div class="mt-3 text-2xl font-headline font-black text-on-surface">{{ contract.model_probability_display }}</div>
+                      <div class="mt-1 flex justify-between text-[0.65rem] font-label uppercase tracking-widest text-on-surface-variant">
+                        <span>Entry {{ contract.yes_cost_display }}</span>
+                        <span class="{% if contract.yes_ev and contract.yes_ev > 0 %}text-secondary{% else %}text-outline{% endif %}">{{ contract.yes_ev_display }} EV</span>
+                      </div>
+                      <div class="mt-3 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+                        <div class="h-full {% if contract.selected_side_is_yes %}{% if contract.theme == 'low' %}bg-primary{% else %}bg-secondary{% endif %}{% else %}bg-white/20{% endif %}" style="width: {{ contract.model_probability_width }}%"></div>
+                      </div>
+                    </div>
+
+                    <div class="rounded-lg border p-4 {% if contract.selected_side_is_no %}{% if contract.theme == 'low' %}border-primary/40 bg-primary/10{% else %}border-secondary/40 bg-secondary/10{% endif %}{% else %}border-white/5 bg-surface-container/50{% endif %}">
+                      <div class="flex items-center justify-between gap-3">
+                        <span class="text-[0.65rem] font-label uppercase tracking-widest {% if contract.selected_side_is_no %}{% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}{% else %}text-on-surface-variant{% endif %}">NO</span>
+                        {% if contract.selected_side_is_no %}
+                          <span class="rounded border {% if contract.theme == 'low' %}border-primary/30 text-primary{% else %}border-secondary/30 text-secondary{% endif %} px-2 py-1 text-[10px] font-label uppercase tracking-widest">{% if contract.selected_side_has_backtested_edge %}Edge{% else %}Selected{% endif %}</span>
+                        {% endif %}
+                      </div>
+                      <div class="mt-3 text-2xl font-headline font-black text-on-surface">{{ contract.no_probability_display }}</div>
+                      <div class="mt-1 flex justify-between text-[0.65rem] font-label uppercase tracking-widest text-on-surface-variant">
+                        <span>Entry {{ contract.no_cost_display }}</span>
+                        <span class="{% if contract.no_ev and contract.no_ev > 0 %}text-secondary{% else %}text-outline{% endif %}">{{ contract.no_ev_display }} EV</span>
+                      </div>
+                      <div class="mt-3 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+                        <div class="h-full {% if contract.selected_side_is_no %}{% if contract.theme == 'low' %}bg-primary{% else %}bg-secondary{% endif %}{% else %}bg-white/20{% endif %}" style="width: {{ contract.no_probability_width }}%"></div>
+                      </div>
+                    </div>
                   </div>
                   <div class="space-y-3">
                     <div class="flex justify-between text-[0.6rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">
@@ -155,12 +182,12 @@
                 </div>
 
                 <p class="text-sm leading-relaxed text-on-surface-variant">{{ contract.signal_summary }}</p>
-                {% if contract.is_backtested_edge %}
+                {% if contract.selected_side_has_backtested_edge %}
                   <p class="text-[0.65rem] font-label uppercase tracking-[0.18em] {% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">
-                    Edge is on {{ contract.watchlist_side_display }}, not necessarily YES.
+                    {{ contract.selected_side_display }} clears the backtested edge threshold.
                   </p>
-                {% elif contract.yes_ev is None or contract.yes_ev <= 0 %}
-                  <p class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">No YES edge from the current model.</p>
+                {% elif contract.selected_side_ev is None or contract.selected_side_ev <= 0 %}
+                  <p class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">No {{ contract.selected_side_display }} edge from the current model.</p>
                 {% endif %}
 
                 <div class="flex items-center justify-between text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">
@@ -168,8 +195,8 @@
                   <a class="hover:text-secondary transition-colors" href="{{ contract.kalshi_url }}" target="_blank" rel="noreferrer">Kalshi</a>
                 </div>
 
-                <a class="w-full py-4 rounded-2xl font-headline font-extrabold tracking-tight transition-transform active:scale-[0.98] mt-auto text-center {% if contract.is_backtested_edge or contract.yes_ev and contract.yes_ev > 0 %}{% if contract.theme == 'low' %}bg-gradient-to-r from-primary to-primary-container text-on-primary-container{% else %}bg-gradient-to-r from-secondary to-secondary-container text-on-secondary-container{% endif %}{% else %}bg-surface-variant/40 hover:bg-surface-variant text-on-surface border border-white/5{% endif %}" href="{{ contract.detail_url }}">
-                  {% if contract.is_backtested_edge %}{{ contract.edge_action_label }}{% else %}{{ contract.action_label }}{% endif %}
+                <a class="w-full py-4 rounded-2xl font-headline font-extrabold tracking-tight transition-transform active:scale-[0.98] mt-auto text-center {% if contract.selected_side_ev and contract.selected_side_ev > 0 %}{% if contract.theme == 'low' %}bg-gradient-to-r from-primary to-primary-container text-on-primary-container{% else %}bg-gradient-to-r from-secondary to-secondary-container text-on-secondary-container{% endif %}{% else %}bg-surface-variant/40 hover:bg-surface-variant text-on-surface border border-white/5{% endif %}" href="{{ contract.detail_url }}">
+                  {{ contract.selected_side_action_label }}
                 </a>
               </div>
             </article>

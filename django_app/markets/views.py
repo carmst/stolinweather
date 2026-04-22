@@ -10,6 +10,7 @@ from .models import DailyBet, KalshiMarket, MarketLocation, ScoredMarketSnapshot
 from .services.history import DEFAULT_HISTORY_DAYS, HISTORY_DAYS, HistoryFilters, get_history_context
 from .services.marketplace import (
     MarketplaceFilters,
+    get_edge_ticker_context,
     get_market_detail_context,
     get_marketplace_context,
     get_watchlist_context,
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 INDEX_COUNTS_CACHE_KEY = "markets:index_counts:v1"
 INDEX_COUNTS_CACHE_SECONDS = int(os.environ.get("DJANGO_INDEX_COUNTS_CACHE_SECONDS", "300"))
+INDEX_EDGE_TICKER_CACHE_KEY = "markets:index_edge_ticker:v2"
+INDEX_EDGE_TICKER_CACHE_SECONDS = int(os.environ.get("DJANGO_INDEX_EDGE_TICKER_CACHE_SECONDS", "60"))
 
 
 def index(request):
@@ -36,7 +39,19 @@ def index(request):
             INDEX_COUNTS_CACHE_SECONDS,
         )
 
-    response = render(request, "markets/index.html", counts)
+    edge_ticker = cache.get(INDEX_EDGE_TICKER_CACHE_KEY)
+    if edge_ticker is None:
+        edge_started_at = time.perf_counter()
+        edge_ticker = get_edge_ticker_context(day="today")
+        cache.set(INDEX_EDGE_TICKER_CACHE_KEY, edge_ticker, INDEX_EDGE_TICKER_CACHE_SECONDS)
+        logger.info(
+            "index_edge_ticker cache_hit=false fetch_ms=%.1f ttl_seconds=%s",
+            _elapsed_ms(edge_started_at),
+            INDEX_EDGE_TICKER_CACHE_SECONDS,
+        )
+
+    context = {**counts, **edge_ticker}
+    response = render(request, "markets/index.html", context)
     logger.info(
         "index_view cache_hit=%s response_bytes=%s total_ms=%.1f",
         str(cache_hit).lower(),
@@ -90,8 +105,11 @@ def watchlist(request):
     if day not in {"today", "tomorrow"}:
         day = "today"
     edge_only = request.GET.get("edge") in {"1", "true", "yes"}
+    side = request.GET.get("side") or "yes"
+    if side not in {"yes", "no"}:
+        side = "yes"
     context_started_at = time.perf_counter()
-    context = get_watchlist_context(MarketplaceFilters(day=day, edge_only=edge_only))
+    context = get_watchlist_context(MarketplaceFilters(day=day, edge_only=edge_only, side=side))
     context_ms = _elapsed_ms(context_started_at)
 
     render_started_at = time.perf_counter()

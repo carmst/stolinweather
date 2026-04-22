@@ -1,0 +1,71 @@
+{
+  "selected_contract_count": 80,
+  "day_count": 9,
+  "wins": 54,
+  "losses": 26,
+  "win_loss_display": "54-26",
+  "win_rate_display": "67.5%",
+  "roi_display": "+15.7%",
+  "return_rate_display": "+13.5%",
+  "pnl_display": "+$13.52",
+  "starting_bankroll_display": "$100.00",
+  "bankroll_display": "$113.52",
+  "threshold_display": "87.0%",
+  "risk_display": "1.0%",
+  "days": [
+    {
+      "date": "2026-04-15",
+      "bets": 3,
+      "wins": 1,
+      "losses": 2,
+      "pnl_display": "-$1.49",
+      "bankroll_display": "$106.34",
+      "positive": false
+    },
+    {
+      "date": "2026-04-16",
+      "bets": 7,
+      "wins": 6,
+      "losses": 1,
+      "pnl_display": "+$3.38",
+      "bankroll_display": "$109.72",
+      "positive": true
+    },
+    {
+      "date": "2026-04-17",
+      "bets": 7,
+      "wins": 5,
+      "losses": 2,
+      "pnl_display": "+$2.19",
+      "bankroll_display": "$111.91",
+      "positive": true
+    },
+    {
+      "date": "2026-04-18",
+      "bets": 5,
+      "wins": 4,
+      "losses": 1,
+      "pnl_display": "+$1.41",
+      "bankroll_display": "$113.32",
+      "positive": true
+    },
+    {
+      "date": "2026-04-19",
+      "bets": 8,
+      "wins": 4,
+      "losses": 4,
+      "pnl_display": "-$1.45",
+      "bankroll_display": "$111.87",
+      "positive": false
+    },
+    {
+      "date": "2026-04-20",
+      "bets": 5,
+      "wins": 4,
+      "losses": 1,
+      "pnl_display": "+$1.65",
+      "bankroll_display": "$113.52",
+      "positive": true
+    }
+  ]
+}

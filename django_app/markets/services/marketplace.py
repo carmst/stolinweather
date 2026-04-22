@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 REPO_DIR = Path(__file__).resolve().parents[3]
 WATCHLIST_CONFIG_PATH = REPO_DIR / "config" / "watchlist.json"
 WATCHLIST_CONFIDENCE_THRESHOLD = 0.87
+RESOLVED_BETS_DIR = REPO_DIR / "output" / "bets" / "resolved"
+DEPLOY_EDGE_STRATEGY_PATH = REPO_DIR / "deploy_data" / "bets" / "latest_edge_strategy_summary.json"
+EDGE_STRATEGY_STARTING_BANKROLL = 100.0
+EDGE_STRATEGY_RISK_PCT = 0.01
+EDGE_STRATEGY_LOCAL_TZ = ZoneInfo("America/New_York")
 WEATHER_FORECAST_PATHS = [
     REPO_DIR / "output" / "weather" / "latest_forecasts_noaa.json",
     REPO_DIR / "output" / "weather" / "latest_forecasts.json",
@@ -144,6 +149,7 @@ class MarketplaceFilters:
     day: str = "today"
     search: str = ""
     edge_only: bool = False
+    side: str = "yes"
 
 
 def get_marketplace_context(filters: MarketplaceFilters) -> dict[str, Any]:
@@ -157,7 +163,7 @@ def get_marketplace_context(filters: MarketplaceFilters) -> dict[str, Any]:
     metadata = _marketplace_metadata_from_rows(raw_rows) or _fetch_marketplace_metadata(day_offset)
 
     normalize_started_at = time.perf_counter()
-    rows = [_normalize_row(row) for row in raw_rows]
+    rows = [_with_marketplace_side_fields(_normalize_row(row), "yes") for row in raw_rows]
     normalize_ms = _elapsed_ms(normalize_started_at)
 
     today_key = _date_key(metadata.get("today_key")) or date.today().isoformat()
@@ -180,13 +186,16 @@ def get_marketplace_context(filters: MarketplaceFilters) -> dict[str, Any]:
         "contract_count": len(rows),
         "total_contract_count": total_contract_count,
         "day": filters.day,
+        "side": "yes",
+        "side_display": "YES",
         "search": filters.search,
         "today_key": today_key,
         "tomorrow_key": tomorrow_key,
         "active_date": active_date,
         "updated_at": metadata.get("updated_at"),
         "positive_yes_count": sum(1 for row in rows if row["yes_ev"] is not None and row["yes_ev"] > 0),
-        "high_confidence_count": sum(1 for row in rows if row.get("is_backtested_edge")),
+        "positive_side_count": sum(1 for row in rows if row["selected_side_ev"] is not None and row["selected_side_ev"] > 0),
+        "high_confidence_count": sum(1 for row in rows if row.get("selected_side_has_backtested_edge")),
         "high_confidence_threshold": WATCHLIST_CONFIDENCE_THRESHOLD,
         "high_confidence_threshold_display": _format_percent(WATCHLIST_CONFIDENCE_THRESHOLD),
     }
@@ -219,6 +228,43 @@ def get_market_detail_context(ticker: str) -> dict[str, Any] | None:
     return None
 
 
+def get_edge_ticker_context(day: str = "today", limit: int = 16) -> dict[str, Any]:
+    started_at = time.perf_counter()
+    day_offset = 1 if day == "tomorrow" else 0
+    raw_rows = _fetch_rows(WATCHLIST_SQL, params=(day_offset,), log_label="home_edge_ticker_fetch")
+    normalized_rows = [_normalize_row(row) for row in raw_rows]
+    edge_rows: list[dict[str, Any]] = []
+    for side in ("yes", "no"):
+        side_rows = [
+            _with_marketplace_side_fields(row, side)
+            for row in _select_best_contracts_by_city(normalized_rows, side)
+        ]
+        edge_rows.extend(row for row in side_rows if row.get("selected_side_has_backtested_edge"))
+
+    edge_rows.sort(
+        key=lambda row: (
+            -(row.get("selected_side_ev") or -999),
+            row.get("location") or "",
+            row.get("selected_side") or "",
+        )
+    )
+    selected_rows = edge_rows[:limit]
+    ticker_items = [_edge_ticker_item(row) for row in selected_rows]
+    logger.info(
+        "home_edge_ticker day=%s candidates=%s edges=%s returned=%s total_ms=%.1f",
+        day,
+        len(normalized_rows),
+        len(edge_rows),
+        len(ticker_items),
+        _elapsed_ms(started_at),
+    )
+    return {
+        "edge_ticker_items": ticker_items,
+        "edge_ticker_count": len(edge_rows),
+        "edge_strategy": _build_edge_strategy_summary(len(edge_rows)),
+    }
+
+
 def get_watchlist_context(filters: MarketplaceFilters) -> dict[str, Any]:
     started_at = time.perf_counter()
     day_offset = 1 if filters.day == "tomorrow" else 0
@@ -226,28 +272,33 @@ def get_watchlist_context(filters: MarketplaceFilters) -> dict[str, Any]:
     raw_rows = _fetch_rows(WATCHLIST_SQL, params=(day_offset,), log_label="watchlist_fetch")
     metadata = _marketplace_metadata_from_rows(raw_rows) or _fetch_marketplace_metadata(day_offset)
 
-    rows = [_normalize_row(row) for row in raw_rows]
-    all_selections = _select_model_high_matches(rows)
-    high_confidence_count = sum(1 for row in all_selections if row.get("is_high_confidence_watchlist"))
+    normalized_rows = [_normalize_row(row) for row in raw_rows]
+    side = filters.side if filters.side in {"yes", "no"} else "yes"
+    all_selections = [
+        _with_marketplace_side_fields(row, side)
+        for row in _select_best_contracts_by_city(normalized_rows, side)
+    ]
+    high_confidence_count = sum(1 for row in all_selections if row.get("selected_side_has_backtested_edge"))
     selections = (
-        [row for row in all_selections if row.get("is_high_confidence_watchlist")]
+        [row for row in all_selections if row.get("selected_side_has_backtested_edge")]
         if filters.edge_only
         else all_selections
     )
 
-    total_probability = sum(row["model_probability"] or 0 for row in selections)
+    total_probability = sum(row["selected_side_probability"] or 0 for row in selections)
     avg_probability = total_probability / len(selections) if selections else 0
-    positive_yes_count = sum(1 for row in selections if row["yes_ev"] is not None and row["yes_ev"] > 0)
+    positive_side_count = sum(1 for row in selections if row["selected_side_ev"] is not None and row["selected_side_ev"] > 0)
 
     today_key = _date_key(metadata.get("today_key")) or date.today().isoformat()
     tomorrow_key = _date_key(metadata.get("tomorrow_key")) or _add_days(today_key, 1)
     active_date = _date_key(metadata.get("active_date")) or (tomorrow_key if filters.day == "tomorrow" else today_key)
 
     logger.info(
-        "watchlist_context day=%s edge_only=%s candidates=%s selected=%s total_ms=%.1f",
+        "watchlist_context day=%s side=%s edge_only=%s candidates=%s selected=%s total_ms=%.1f",
         filters.day,
+        side,
         str(filters.edge_only).lower(),
-        len(rows),
+        len(normalized_rows),
         len(selections),
         _elapsed_ms(started_at),
     )
@@ -256,8 +307,9 @@ def get_watchlist_context(filters: MarketplaceFilters) -> dict[str, Any]:
         "rows": selections,
         "row_count": len(selections),
         "unfiltered_row_count": len(all_selections),
-        "candidate_count": len(rows),
-        "positive_yes_count": positive_yes_count,
+        "candidate_count": len(normalized_rows),
+        "positive_yes_count": sum(1 for row in selections if row["yes_ev"] is not None and row["yes_ev"] > 0),
+        "positive_side_count": positive_side_count,
         "high_confidence_count": high_confidence_count,
         "high_confidence_threshold": WATCHLIST_CONFIDENCE_THRESHOLD,
         "high_confidence_threshold_display": _format_percent(WATCHLIST_CONFIDENCE_THRESHOLD),
@@ -265,6 +317,8 @@ def get_watchlist_context(filters: MarketplaceFilters) -> dict[str, Any]:
         "watchlist_locations": config["locations"],
         "watchlist_tickers": config["tickers"],
         "day": filters.day,
+        "side": side,
+        "side_display": side.upper(),
         "edge_only": filters.edge_only,
         "today_key": today_key,
         "tomorrow_key": tomorrow_key,
@@ -557,6 +611,254 @@ def _select_model_high_matches(rows: list[dict[str, Any]]) -> list[dict[str, Any
     return sorted(best_by_city.values(), key=lambda row: (-(row.get("yes_ev") or -999), row.get("location") or ""))
 
 
+def _select_best_contracts_by_city(rows: list[dict[str, Any]], side: str) -> list[dict[str, Any]]:
+    best_by_city: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        city = row.get("location") or "Unknown"
+        current = best_by_city.get(city)
+        if current is None or _marketplace_side_sort_key(row, side) > _marketplace_side_sort_key(current, side):
+            best_by_city[city] = row
+    return sorted(
+        best_by_city.values(),
+        key=lambda row: (-(_side_metric(row, side, "ev") or -999), row.get("location") or ""),
+    )
+
+
+def _marketplace_side_sort_key(row: dict[str, Any], side: str) -> tuple[float, float, float, int, str]:
+    ev = _side_metric(row, side, "ev")
+    probability = _side_metric(row, side, "probability")
+    cost = _side_metric(row, side, "cost")
+    distance = row.get("model_high_match_distance")
+    if distance is None:
+        distance = _model_high_match_distance(row)
+    return (
+        float(ev if ev is not None else -999),
+        float(probability if probability is not None else -999),
+        -float(cost if cost is not None else 999),
+        -int(distance if distance is not None else 999),
+        str(row.get("ticker") or ""),
+    )
+
+
+def _side_metric(row: dict[str, Any], side: str, metric: str) -> float | None:
+    keys = {
+        "yes": {
+            "probability": "model_probability",
+            "cost": "yes_ask",
+            "ev": "yes_ev",
+        },
+        "no": {
+            "probability": "no_probability",
+            "cost": "no_ask",
+            "ev": "no_ev",
+        },
+    }
+    key = keys[side][metric]
+    value = row.get(key)
+    return float(value) if isinstance(value, (int, float)) else None
+
+
+def _with_marketplace_side_fields(row: dict[str, Any], side: str) -> dict[str, Any]:
+    probability = _side_metric(row, side, "probability")
+    cost = _side_metric(row, side, "cost")
+    ev = _side_metric(row, side, "ev")
+    has_edge = (
+        probability is not None
+        and probability >= WATCHLIST_CONFIDENCE_THRESHOLD
+        and ev is not None
+        and ev > 0
+    )
+    return {
+        **row,
+        "model_high_match_distance": _model_high_match_distance(row),
+        "model_high_floored": _model_high_floored(row),
+        "model_high_settlement_band": _model_high_settlement_band(row),
+        "selected_side": side,
+        "selected_side_display": side.upper(),
+        "selected_side_is_yes": side == "yes",
+        "selected_side_is_no": side == "no",
+        "selected_side_probability": probability,
+        "selected_side_probability_width": 0 if probability is None else max(0, min(100, round(probability * 100))),
+        "selected_side_probability_display": _format_percent(probability),
+        "selected_side_cost": cost,
+        "selected_side_cost_display": _format_dollars(cost),
+        "selected_side_ev": ev,
+        "selected_side_ev_display": _format_ev(ev),
+        "selected_side_has_backtested_edge": has_edge,
+        "selected_side_action_label": f"EXECUTE {side.upper()}" if ev is not None and ev > 0 else f"INSPECT {side.upper()}",
+    }
+
+
+def _edge_ticker_item(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "location": row.get("location") or "Unknown",
+        "contract_label": row.get("contract_label") or "Temperature contract",
+        "side": row.get("selected_side_display") or "PASS",
+        "probability": row.get("selected_side_probability_display") or "--",
+        "cost": row.get("selected_side_cost_display") or "--",
+        "ev": row.get("selected_side_ev_display") or "--",
+        "theme": row.get("theme") or "high",
+        "detail_url": row.get("detail_url") or "#",
+    }
+
+
+def _build_edge_strategy_summary(active_signal_count: int) -> dict[str, Any]:
+    bankroll = EDGE_STRATEGY_STARTING_BANKROLL
+    total_bets = 0
+    wins = 0
+    losses = 0
+    total_staked = 0.0
+    days: list[dict[str, Any]] = []
+
+    if not RESOLVED_BETS_DIR.exists():
+        return _load_deploy_edge_strategy_summary(active_signal_count)
+
+    for path in sorted(RESOLVED_BETS_DIR.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not _is_clean_8am_snapshot(payload):
+            continue
+
+        selected_bets = _select_edge_strategy_bets(payload.get("bets") or [])
+        if not selected_bets:
+            continue
+
+        day_wins = 0
+        day_losses = 0
+        day_pnl = 0.0
+        stake = bankroll * EDGE_STRATEGY_RISK_PCT
+
+        for bet in selected_bets:
+            cost = _float_or_none(bet.get("contract_cost"))
+            if cost is None or cost <= 0:
+                continue
+            won = bool(bet.get("bet_won"))
+            pnl = (stake / cost) * (1 - cost) if won else -stake
+            bankroll += pnl
+            day_pnl += pnl
+            total_staked += stake
+            total_bets += 1
+            if won:
+                wins += 1
+                day_wins += 1
+            else:
+                losses += 1
+                day_losses += 1
+
+        if day_wins or day_losses:
+            days.append(
+                {
+                    "date": payload.get("target_date") or path.stem,
+                    "bets": day_wins + day_losses,
+                    "wins": day_wins,
+                    "losses": day_losses,
+                    "pnl_display": _format_signed_dollars(day_pnl),
+                    "bankroll_display": _format_dollars(bankroll),
+                    "positive": day_pnl >= 0,
+                }
+            )
+
+    pnl = bankroll - EDGE_STRATEGY_STARTING_BANKROLL
+    roi = pnl / total_staked if total_staked else None
+    win_rate = wins / total_bets if total_bets else None
+    return {
+        "active_signal_count": active_signal_count,
+        "selected_contract_count": total_bets,
+        "day_count": len(days),
+        "wins": wins,
+        "losses": losses,
+        "win_loss_display": f"{wins}-{losses}" if total_bets else "--",
+        "win_rate_display": _format_percent(win_rate),
+        "roi_display": _format_signed_percent(roi),
+        "return_rate_display": _format_signed_percent((bankroll / EDGE_STRATEGY_STARTING_BANKROLL) - 1),
+        "pnl_display": _format_signed_dollars(pnl),
+        "starting_bankroll_display": _format_dollars(EDGE_STRATEGY_STARTING_BANKROLL),
+        "bankroll_display": _format_dollars(bankroll),
+        "threshold_display": _format_percent(WATCHLIST_CONFIDENCE_THRESHOLD),
+        "risk_display": _format_percent(EDGE_STRATEGY_RISK_PCT),
+        "days": days[-6:],
+    }
+
+
+def _load_deploy_edge_strategy_summary(active_signal_count: int) -> dict[str, Any]:
+    try:
+        payload = json.loads(DEPLOY_EDGE_STRATEGY_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return _empty_edge_strategy(active_signal_count)
+    return {
+        **_empty_edge_strategy(active_signal_count),
+        **payload,
+        "active_signal_count": active_signal_count,
+    }
+
+
+def _empty_edge_strategy(active_signal_count: int) -> dict[str, Any]:
+    return {
+        "active_signal_count": active_signal_count,
+        "selected_contract_count": 0,
+        "day_count": 0,
+        "wins": 0,
+        "losses": 0,
+        "win_loss_display": "--",
+        "win_rate_display": "--",
+        "roi_display": "--",
+        "return_rate_display": "--",
+        "pnl_display": "--",
+        "starting_bankroll_display": _format_dollars(EDGE_STRATEGY_STARTING_BANKROLL),
+        "bankroll_display": _format_dollars(EDGE_STRATEGY_STARTING_BANKROLL),
+        "threshold_display": _format_percent(WATCHLIST_CONFIDENCE_THRESHOLD),
+        "risk_display": _format_percent(EDGE_STRATEGY_RISK_PCT),
+        "days": [],
+    }
+
+
+def _is_clean_8am_snapshot(payload: dict[str, Any]) -> bool:
+    generated_at = _parse_utc_datetime(payload.get("generated_at"))
+    if generated_at is None:
+        bets = payload.get("bets") or []
+        generated_at = _parse_utc_datetime(bets[0].get("logged_at")) if bets else None
+    if generated_at is None:
+        return False
+    local = generated_at.astimezone(EDGE_STRATEGY_LOCAL_TZ)
+    local_hour = local.hour + local.minute / 60
+    return 7.5 <= local_hour <= 8.5
+
+
+def _select_edge_strategy_bets(bets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    best_by_city: dict[str, dict[str, Any]] = {}
+    for bet in bets:
+        if bet.get("status") != "resolved" or bet.get("bet_won") is None:
+            continue
+        probability = _float_or_none(bet.get("model_win_probability"))
+        expected_value = _float_or_none(bet.get("expected_value"))
+        cost = _float_or_none(bet.get("contract_cost"))
+        if (
+            probability is None
+            or probability < WATCHLIST_CONFIDENCE_THRESHOLD
+            or expected_value is None
+            or expected_value <= 0
+            or cost is None
+            or cost <= 0
+        ):
+            continue
+        key = str(bet.get("weather_market_id") or bet.get("city") or bet.get("ticker") or "")
+        current = best_by_city.get(key)
+        if current is None or _edge_bet_sort_key(bet) > _edge_bet_sort_key(current):
+            best_by_city[key] = bet
+    return sorted(best_by_city.values(), key=lambda bet: (str(bet.get("city") or ""), str(bet.get("ticker") or "")))
+
+
+def _edge_bet_sort_key(bet: dict[str, Any]) -> tuple[float, float, float, str]:
+    return (
+        _float_or_none(bet.get("expected_value")) or -999,
+        _float_or_none(bet.get("model_win_probability")) or -999,
+        -(_float_or_none(bet.get("contract_cost")) or 999),
+        str(bet.get("ticker") or ""),
+    )
+
+
 def _watchlist_sort_key(row: dict[str, Any]) -> tuple[float, int, float, float]:
     distance = row.get("model_high_match_distance")
     match_score = -float(distance if distance is not None else 9999)
@@ -648,6 +950,9 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
         "model_probability": model_probability,
         "model_probability_width": 0 if model_probability is None else max(0, min(100, round(model_probability * 100))),
         "model_probability_display": _format_percent(model_probability),
+        "no_probability": no_probability,
+        "no_probability_width": 0 if no_probability is None else max(0, min(100, round(no_probability * 100))),
+        "no_probability_display": _format_percent(no_probability),
         "market_probability": implied_probability,
         "market_probability_display": _format_percent(implied_probability),
         "yes_ask": yes_ask,
@@ -660,6 +965,8 @@ def _normalize_row(row: dict[str, Any]) -> dict[str, Any]:
         "no_ev_display": _format_ev(no_ev),
         "watchlist_side": side_label,
         "watchlist_side_display": side_label.upper() if side_label else "PASS",
+        "watchlist_side_is_yes": side_label == "yes",
+        "watchlist_side_is_no": side_label == "no",
         "watchlist_side_probability": side_probability,
         "watchlist_side_probability_display": _format_percent(side_probability),
         "watchlist_side_ev": side_ev,
@@ -842,12 +1149,38 @@ def _float_or_none(value: Any) -> float | None:
         return None
 
 
+def _parse_utc_datetime(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=ZoneInfo("UTC"))
+    return parsed
+
+
 def _format_percent(value: float | None) -> str:
     return "--" if value is None else f"{value * 100:.1f}%"
 
 
+def _format_signed_percent(value: float | None) -> str:
+    if value is None:
+        return "--"
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}{abs(value) * 100:.1f}%"
+
+
 def _format_dollars(value: float | None) -> str:
     return "--" if value is None else f"${value:.2f}"
+
+
+def _format_signed_dollars(value: float | None) -> str:
+    if value is None:
+        return "--"
+    sign = "+" if value >= 0 else "-"
+    return f"{sign}${abs(value):.2f}"
 
 
 def _format_ev(value: float | None) -> str:
