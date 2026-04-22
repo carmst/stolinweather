@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Join archived NOAA forecast snapshots with observed NOAA daily highs."""
+"""Build training rows from blended provider forecasts against official highs."""
 
 from __future__ import annotations
 
 import json
 from datetime import datetime, time, timezone
 from pathlib import Path
+from statistics import median
 from zoneinfo import ZoneInfo
 
 
@@ -30,9 +31,14 @@ def load_history() -> dict[str, dict[str, float]]:
     return history
 
 
-def iter_snapshots() -> list[dict]:
+def iter_provider_snapshots(provider_suffix: str | None) -> list[dict]:
     snapshots = []
-    for path in sorted(WEATHER_SNAPSHOT_DIR.glob("*-noaa.jsonl")):
+    pattern = "*.jsonl" if provider_suffix is None else f"*-{provider_suffix}.jsonl"
+    for path in sorted(WEATHER_SNAPSHOT_DIR.glob(pattern)):
+        if provider_suffix is None and path.name.endswith("-noaa.jsonl"):
+            continue
+        if provider_suffix is None and path.name.endswith("-visual-crossing.jsonl"):
+            continue
         with path.open("r", encoding="utf-8") as handle:
             for line in handle:
                 line = line.strip()
@@ -60,55 +66,109 @@ def lead_bucket(lead_hours: float) -> str:
     return "day_3_plus"
 
 
-def main() -> int:
-    history = load_history()
-    rows = []
-
-    for snapshot in iter_snapshots():
+def daily_forecast_index(snapshots: list[dict], provider: str) -> dict[tuple[str, str, str], dict]:
+    index = {}
+    for snapshot in snapshots:
         market = snapshot.get("market", {})
         market_id = market.get("market_id")
-        if not market_id or market_id not in history:
+        pulled_at = snapshot.get("pulled_at")
+        if not market_id or not pulled_at:
             continue
-
-        observed = history[market_id]
-        pulled_at = datetime.fromisoformat(snapshot["pulled_at"].replace("Z", "+00:00"))
-        tz_name = market.get("timezone", "UTC")
-
         for daily_row in snapshot.get("daily", []):
             forecast_date = daily_row.get("date")
             forecast_max = daily_row.get("temperature_2m_max")
-            observed_max = observed.get(forecast_date)
-
-            if not forecast_date or forecast_max is None or observed_max is None:
+            if not forecast_date or forecast_max is None:
                 continue
+            key = (market_id, pulled_at, forecast_date)
+            index[key] = {
+                "provider": provider,
+                "snapshot": snapshot,
+                "forecast_max_f": float(forecast_max),
+                "forecast_min_f": (
+                    float(daily_row["temperature_2m_min"])
+                    if daily_row.get("temperature_2m_min") is not None
+                    else None
+                ),
+            }
+    return index
 
-            lead_hours = (target_timestamp(forecast_date, tz_name) - pulled_at).total_seconds() / 3600.0
-            if lead_hours < -12:
-                continue
 
-            rows.append(
-                {
-                    "market_id": market_id,
-                    "location": market.get("location"),
-                    "pulled_at": snapshot["pulled_at"],
-                    "forecast_date": forecast_date,
-                    "month": int(forecast_date[5:7]),
-                    "lead_hours": round(lead_hours, 2),
-                    "lead_bucket": lead_bucket(lead_hours),
-                    "forecast_max_f": float(forecast_max),
-                    "observed_max_f": float(observed_max),
-                    "error_f": round(float(forecast_max) - float(observed_max), 2),
-                }
-            )
+def main() -> int:
+    history = load_history()
+    noaa_index = daily_forecast_index(iter_provider_snapshots("noaa"), "noaa")
+    open_meteo_index = daily_forecast_index(iter_provider_snapshots(None), "open-meteo")
+    visual_crossing_index = daily_forecast_index(iter_provider_snapshots("visual-crossing"), "visual-crossing")
+
+    all_keys = sorted(set(noaa_index) | set(open_meteo_index) | set(visual_crossing_index))
+    rows = []
+
+    for market_id, pulled_at_text, forecast_date in all_keys:
+        if market_id not in history:
+            continue
+
+        observed_max = history[market_id].get(forecast_date)
+        if observed_max is None:
+            continue
+
+        chosen = noaa_index.get((market_id, pulled_at_text, forecast_date))
+        if chosen is None:
+            chosen = open_meteo_index.get((market_id, pulled_at_text, forecast_date))
+        if chosen is None:
+            chosen = visual_crossing_index.get((market_id, pulled_at_text, forecast_date))
+        if chosen is None:
+            continue
+
+        snapshot = chosen["snapshot"]
+        market = snapshot.get("market", {})
+        tz_name = market.get("timezone", "UTC")
+        pulled_at = datetime.fromisoformat(pulled_at_text.replace("Z", "+00:00"))
+        lead_hours = (target_timestamp(forecast_date, tz_name) - pulled_at).total_seconds() / 3600.0
+        if lead_hours < -12:
+            continue
+
+        noaa_forecast = noaa_index.get((market_id, pulled_at_text, forecast_date), {}).get("forecast_max_f")
+        open_meteo_forecast = open_meteo_index.get((market_id, pulled_at_text, forecast_date), {}).get("forecast_max_f")
+        visual_crossing_forecast = visual_crossing_index.get((market_id, pulled_at_text, forecast_date), {}).get("forecast_max_f")
+        source_values = [
+            value
+            for value in (noaa_forecast, open_meteo_forecast, visual_crossing_forecast)
+            if value is not None
+        ]
+        if not source_values:
+            continue
+
+        blended_forecast = round(float(median(source_values)), 2)
+        provider_spread = round(max(source_values) - min(source_values), 2) if len(source_values) >= 2 else 0.0
+
+        rows.append(
+            {
+                "market_id": market_id,
+                "location": market.get("location"),
+                "pulled_at": pulled_at_text,
+                "forecast_date": forecast_date,
+                "month": int(forecast_date[5:7]),
+                "lead_hours": round(lead_hours, 2),
+                "lead_bucket": lead_bucket(lead_hours),
+                "noaa_forecast_max_f": noaa_forecast,
+                "open_meteo_forecast_max_f": open_meteo_forecast,
+                "visual_crossing_forecast_max_f": visual_crossing_forecast,
+                "source_count": len(source_values),
+                "provider_spread_f": provider_spread,
+                "blended_forecast_max_f": blended_forecast,
+                "observed_max_f": float(observed_max),
+                "blended_error_f": round(blended_forecast - float(observed_max), 2),
+            }
+        )
 
     payload = {
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "source": "blended-forecast-training-v1",
         "row_count": len(rows),
         "rows": rows,
     }
     OUTPUT_PATH.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT_PATH.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    print(f"Wrote {payload['row_count']} forecast training rows")
+    print(f"Wrote {payload['row_count']} blended forecast training rows")
     print(f"Training file: {OUTPUT_PATH}")
     return 0
 

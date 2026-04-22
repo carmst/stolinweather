@@ -1,2 +1,2 @@
-# This project currently uses only the Python standard library.
-# No third-party Python packages are required at this time.
+Django>=4.2,<5.0
+psycopg[binary]>=3.2,<4.0

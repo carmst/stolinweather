@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Profile | STOLIN WEATHER</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&family=Inter:wght@400;600&family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
+    <style>
+      body { background: #070f12; color: #f0f8fc; font-family: Manrope, sans-serif; }
+      .glass-panel { background: rgba(28, 39, 44, 0.45); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+    </style>
+  </head>
+  <body class="min-h-screen bg-[#070f12] text-slate-100">
+    <nav class="fixed top-0 z-50 w-full bg-slate-950/60 shadow-2xl shadow-cyan-900/10 backdrop-blur-xl">
+      <div class="mx-auto flex max-w-[1920px] items-center justify-between px-8 py-4">
+        <a class="text-2xl font-black italic tracking-tighter text-cyan-400" href="/">STOLIN WEATHER</a>
+        <div class="hidden items-center gap-8 font-bold tracking-tight md:flex">
+          <a class="text-slate-400 transition-colors hover:text-cyan-200" href="/marketplace.html">Marketplace</a>
+          <a class="text-slate-400 transition-colors hover:text-cyan-200" href="/methodology.html">Methodology</a>
+          <a class="text-slate-400 transition-colors hover:text-cyan-200" href="/watchlist.html">Watchlist</a>
+          <a class="text-slate-400 transition-colors hover:text-cyan-200" href="/history.html">History</a>
+        </div>
+        <button class="rounded-xl border border-white/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-white/5 disabled:opacity-60" id="profile-signout" type="button">Sign Out</button>
+      </div>
+    </nav>
+
+    <main class="relative min-h-screen overflow-hidden px-6 py-32">
+      <div class="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(109,235,253,0.14),transparent_34%),radial-gradient(circle_at_82%_78%,rgba(255,115,72,0.08),transparent_34%)]"></div>
+      <section class="glass-panel relative z-10 mx-auto max-w-5xl rounded-[2rem] border border-white/10 p-8 shadow-2xl">
+        <div class="mb-8 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300" id="profile-status">Loading profile...</div>
+        <div id="profile-content"></div>
+      </section>
+    </main>
+    <script src="/auth-client.js"></script>
+    <script src="/profile-page.js"></script>
+  </body>
+</html>

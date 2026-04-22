@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -73,22 +74,29 @@ def pick_side_price(market: dict[str, Any], side: str) -> float | None:
     return None
 
 
-def side_metrics(market: dict[str, Any]) -> dict[str, Any]:
+def side_metrics_for_side(market: dict[str, Any], side: str) -> dict[str, Any]:
     model_prob = float(market.get("model_probability") or 0.0)
-    recommended_side = "yes" if model_prob >= 0.5 else "no"
-    win_prob = model_prob if recommended_side == "yes" else 1.0 - model_prob
-    contract_cost = pick_side_price(market, recommended_side)
+    if side not in {"yes", "no"}:
+        raise ValueError(f"Unsupported side: {side}")
+    win_prob = model_prob if side == "yes" else 1.0 - model_prob
+    contract_cost = pick_side_price(market, side)
     expected_value = None if contract_cost is None else round(win_prob - contract_cost, 4)
     expected_return = (
         None if contract_cost in (None, 0) else round(expected_value / contract_cost, 4)
     )
     return {
-        "recommended_side": recommended_side,
+        "recommended_side": side,
         "win_probability": round(win_prob, 4),
         "contract_cost": contract_cost,
         "expected_value": expected_value,
         "expected_return": expected_return,
     }
+
+
+def side_metrics(market: dict[str, Any]) -> dict[str, Any]:
+    model_prob = float(market.get("model_probability") or 0.0)
+    recommended_side = "yes" if model_prob >= 0.5 else "no"
+    return side_metrics_for_side(market, recommended_side)
 
 
 def location_key(market: dict[str, Any]) -> str:
@@ -147,6 +155,7 @@ def build_bet_entry(
         "event_ticker": market.get("event_ticker"),
         "ticker": market.get("ticker"),
         "title": market.get("title"),
+        "position_title": f"{metrics['recommended_side'].upper()} | {market.get('title')}",
         "signal": market.get("signal_short") or market.get("model_signal"),
         "lead_bucket": market.get("lead_bucket"),
         "strike_type": market.get("strike_type"),
@@ -191,10 +200,18 @@ def select_daily_bets(
             by_city[key] = (market, metrics)
 
     logged_at = utc_now()
-    selected = [
-        build_bet_entry(market, metrics, logged_at, bankroll, risk_pct)
-        for market, metrics in by_city.values()
-    ]
+    selected: list[dict[str, Any]] = []
+    for market, _metrics in by_city.values():
+        for side in ("yes", "no"):
+            selected.append(
+                build_bet_entry(
+                    market,
+                    side_metrics_for_side(market, side),
+                    logged_at,
+                    bankroll,
+                    risk_pct,
+                )
+            )
     selected.sort(key=lambda item: (item.get("city") or "", -(item.get("expected_value") or -999.0)))
     return selected
 

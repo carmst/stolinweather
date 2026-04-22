@@ -94,6 +94,9 @@ create table if not exists app.kalshi_market_snapshots (
 create index if not exists kalshi_market_snapshots_ticker_pulled_at_idx
   on app.kalshi_market_snapshots (ticker, pulled_at desc);
 
+create index if not exists kalshi_market_snapshots_pulled_at_idx
+  on app.kalshi_market_snapshots (pulled_at desc);
+
 -- Weather snapshots
 
 create table if not exists app.weather_snapshots (
@@ -197,6 +200,60 @@ create table if not exists app.scored_market_snapshots (
 
 create index if not exists scored_market_snapshots_ticker_pulled_at_idx
   on app.scored_market_snapshots (ticker, pulled_at desc);
+
+create index if not exists scored_market_snapshots_pulled_at_idx
+  on app.scored_market_snapshots (pulled_at desc);
+
+create index if not exists scored_market_snapshots_forecast_market_pulled_at_idx
+  on app.scored_market_snapshots (forecast_date desc, market_id, weather_market_id, pulled_at desc);
+
+create table if not exists app.latest_marketplace_contracts (
+  ticker text primary key references app.kalshi_markets(ticker),
+  pulled_at timestamptz not null,
+  forecast_date date not null,
+  adjusted_forecast_max_f double precision,
+  forecast_sigma_f double precision,
+  noaa_forecast_max_f double precision,
+  open_meteo_forecast_max_f double precision,
+  forecast_source_spread_f double precision,
+  model_probability numeric(10,4),
+  edge numeric(10,4),
+  signal_short text,
+  market_context text,
+  model_signal text,
+  lead_bucket text,
+  title text not null,
+  subtitle text,
+  series_ticker text,
+  floor_strike double precision,
+  cap_strike double precision,
+  functional_strike double precision,
+  custom_strike text,
+  market_status text,
+  event_date date,
+  close_time timestamptz,
+  market_id text references app.market_locations(market_id),
+  city text,
+  event_type text,
+  timezone text,
+  price_pulled_at timestamptz,
+  yes_bid_dollars numeric(10,4),
+  yes_ask_dollars numeric(10,4),
+  no_bid_dollars numeric(10,4),
+  no_ask_dollars numeric(10,4),
+  last_price_dollars numeric(10,4),
+  implied_probability numeric(10,4),
+  volume numeric(18,4),
+  volume_24h numeric(18,4),
+  search_text text not null default '',
+  refreshed_at timestamptz not null default now()
+);
+
+create index if not exists latest_marketplace_contracts_date_sort_idx
+  on app.latest_marketplace_contracts (forecast_date, city, floor_strike, ticker);
+
+create index if not exists latest_marketplace_contracts_refreshed_at_idx
+  on app.latest_marketplace_contracts (refreshed_at desc);
 
 -- Compact rollups for long-term retention
 
@@ -337,11 +394,54 @@ create table if not exists app.daily_bets (
   pnl_per_contract numeric(10,4),
   pnl_dollars numeric(12,4),
   inserted_at timestamptz not null default now(),
-  unique (target_date, city)
+  unique (target_date, city, recommended_side)
 );
 
 create index if not exists daily_bets_target_date_idx
   on app.daily_bets (target_date desc);
+
+alter table app.daily_bets
+  drop constraint if exists daily_bets_target_date_city_key;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'app.daily_bets'::regclass
+      and conname = 'daily_bets_target_date_city_recommended_side_key'
+  ) then
+    alter table app.daily_bets
+      add constraint daily_bets_target_date_city_recommended_side_key
+      unique (target_date, city, recommended_side);
+  end if;
+end $$;
+
+create table if not exists app.kalshi_settlement_reconciliations (
+  id uuid primary key default gen_random_uuid(),
+  target_date date not null,
+  reconciled_at timestamptz not null,
+  weather_market_id text references app.market_locations(market_id),
+  city text not null,
+  ticker text not null references app.kalshi_markets(ticker),
+  event_ticker text,
+  recommended_side text not null,
+  title text not null,
+  observed_high_f double precision,
+  computed_contract_yes_outcome boolean,
+  kalshi_contract_yes_outcome boolean,
+  kalshi_status text,
+  kalshi_result text,
+  kalshi_market_payload jsonb not null default '{}'::jsonb,
+  alignment_status text not null,
+  notes text,
+  inserted_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (target_date, ticker, recommended_side)
+);
+
+create index if not exists kalshi_settlement_reconciliations_date_idx
+  on app.kalshi_settlement_reconciliations (target_date desc);
 
 create table if not exists app.bankroll_history (
   target_date date primary key,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a lead-time forecast error model from NOAA training rows."""
+"""Build a lead-time forecast error model from blended forecast training rows."""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 TRAINING_PATH = ROOT / "output" / "models" / "forecast_training_rows.json"
 OUTPUT_PATH = ROOT / "output" / "models" / "forecast_error_model.json"
+MIN_WEEKLY_COUNT = 20
 
 
 def mean(values: list[float]) -> float:
@@ -42,14 +43,30 @@ def main() -> int:
         return 0
 
     payload = json.loads(TRAINING_PATH.read_text())
-    grouped: dict[tuple[str, int, str], list[float]] = defaultdict(list)
+    monthly_grouped: dict[tuple[str, int, str], list[float]] = defaultdict(list)
+    weekly_grouped: dict[tuple[str, int, str], list[float]] = defaultdict(list)
 
     for row in payload.get("rows", []):
-        grouped[(row["location"], int(row["month"]), row["lead_bucket"])].append(float(row["error_f"]))
+        error = row.get("blended_error_f", row.get("error_f"))
+        if error is None:
+            continue
+        forecast_date = datetime.strptime(row["forecast_date"], "%Y-%m-%d").date()
+        monthly_grouped[(row["location"], int(row["month"]), row["lead_bucket"])].append(float(error))
+        weekly_grouped[(row["location"], int(forecast_date.isocalendar().week), row["lead_bucket"])].append(float(error))
 
     locations: dict[str, dict[str, dict[str, dict[str, float]]]] = defaultdict(lambda: defaultdict(dict))
-    for (location, month, bucket), errors in grouped.items():
+    for (location, month, bucket), errors in monthly_grouped.items():
         locations[location][str(month)][bucket] = {
+            "count": len(errors),
+            "mean_error_f": round(mean(errors), 2),
+            "sigma_error_f": round(max(1.25, stdev(errors)), 2),
+        }
+
+    weekly_locations: dict[str, dict[str, dict[str, dict[str, float]]]] = defaultdict(lambda: defaultdict(dict))
+    for (location, week, bucket), errors in weekly_grouped.items():
+        if len(errors) < MIN_WEEKLY_COUNT:
+            continue
+        weekly_locations[location][str(week)][bucket] = {
             "count": len(errors),
             "mean_error_f": round(mean(errors), 2),
             "sigma_error_f": round(max(1.25, stdev(errors)), 2),
@@ -57,9 +74,13 @@ def main() -> int:
 
     model = {
         "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-        "source": "forecast-error-model-v1",
+        "source": "forecast-error-model-v3",
+        "primary_bucket": "iso_week",
+        "fallback_bucket": "month",
+        "min_weekly_count": MIN_WEEKLY_COUNT,
         "row_count": len(payload.get("rows", [])),
         "locations": {location: dict(months) for location, months in locations.items()},
+        "weekly_locations": {location: dict(weeks) for location, weeks in weekly_locations.items()},
     }
     OUTPUT_PATH.write_text(json.dumps(model, indent=2) + "\n", encoding="utf-8")
     print(f"Wrote forecast error model for {len(model['locations'])} locations")

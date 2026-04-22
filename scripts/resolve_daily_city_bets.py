@@ -105,6 +105,7 @@ def resolve_bet(bet: dict[str, Any], observed_high: float) -> dict[str, Any]:
         "observed_high_f": round(observed_high, 2),
         "contract_yes_outcome": yes_outcome,
         "bet_won": bet_won,
+        "position_won": bet_won,
         "pnl_per_contract": pnl,
         "pnl_dollars": pnl_dollars,
     }
@@ -131,6 +132,7 @@ def soft_resolve_bet(bet: dict[str, Any], preliminary: dict[str, Any]) -> dict[s
         "preliminary_observed_high_f": round(preliminary_high, 2),
         "preliminary_contract_yes_outcome": yes_outcome,
         "preliminary_bet_won": provisional_bet_won,
+        "preliminary_position_won": provisional_bet_won,
         "preliminary_source": preliminary.get("provider"),
         "preliminary_pulled_at": preliminary.get("pulled_at"),
         "preliminary_stations": preliminary.get("stations", []),

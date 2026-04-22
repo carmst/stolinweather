@@ -420,6 +420,9 @@ def model_feature_vector(row: dict[str, Any], feature_order: list[str], means: d
 
 
 def predict_residual(row: dict[str, Any], model: dict[str, Any]) -> float | None:
+    if model.get("model_type") == "shrunken_bias_v1":
+        return predict_shrunken_bias_residual(row, model)
+
     feature_order = model.get("feature_order") or []
     weights = model.get("weights") or []
     if not feature_order or not weights or len(feature_order) != len(weights):
@@ -427,3 +430,56 @@ def predict_residual(row: dict[str, Any], model: dict[str, Any]) -> float | None
     vector = model_feature_vector(row, feature_order, model.get("means", {}), model.get("scales", {}))
     intercept = float(model.get("intercept", 0.0))
     return intercept + sum(float(weight) * value for weight, value in zip(weights, vector))
+
+
+def _bias_group_key(row: dict[str, Any], group_name: str) -> str | None:
+    if group_name == "market_id":
+        return row.get("market_id")
+    if group_name == "market_week":
+        market_id = row.get("market_id")
+        forecast_date = row.get("forecast_date")
+        if not market_id or not forecast_date:
+            return None
+        week = parse_timestamp(f"{forecast_date}T00:00:00+00:00").date().isocalendar().week
+        return f"{market_id}|{int(week)}"
+    if group_name == "market_month":
+        market_id = row.get("market_id")
+        month = safe_float(row.get("month"))
+        if not market_id or month is None:
+            return None
+        return f"{market_id}|{int(month)}"
+    return None
+
+
+def predict_shrunken_bias_residual(row: dict[str, Any], model: dict[str, Any]) -> float | None:
+    window = model.get("checkpoint_window") or {}
+    local_hour = safe_float(row.get("local_checkpoint_hour"))
+    lead_hours = safe_float(row.get("lead_hours"))
+    if row.get("lead_bucket") != model.get("lead_bucket", "same_day"):
+        return None
+    if local_hour is None or lead_hours is None:
+        return None
+    if local_hour < float(window.get("min_hour", 0)) or local_hour > float(window.get("max_hour", 24)):
+        return None
+    if lead_hours < float(model.get("min_lead_hours", 0)):
+        return None
+
+    global_residual = float(model.get("global_residual_f") or 0.0)
+    group_weights = model.get("group_weights") or {}
+    group_tables = model.get("group_tables") or {}
+    weighted_corrections = []
+    for group_name, weight in group_weights.items():
+        key = _bias_group_key(row, group_name)
+        table = group_tables.get(group_name) or {}
+        correction = table.get(key or "", {}).get("correction_f", global_residual)
+        weighted_corrections.append((float(weight), float(correction)))
+
+    if weighted_corrections:
+        residual = sum(weight * correction for weight, correction in weighted_corrections) / sum(weight for weight, _ in weighted_corrections)
+    else:
+        residual = global_residual
+
+    clip = safe_float(model.get("correction_clip_f"))
+    if clip is not None:
+        residual = max(-clip, min(clip, residual))
+    return residual

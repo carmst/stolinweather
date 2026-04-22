@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.weather-app.kalshi-loop</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/carmstrong/weather_app/scripts/run_kalshi_loop.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/carmstrong/weather_app</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/opt/libpq/bin:/usr/local/opt/libpq/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>DATABASE_URL</key>
+    <string>REPLACE_ME</string>
+    <key>KALSHI_POLL_INTERVAL_SECONDS</key>
+    <string>60</string>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/Users/carmstrong/weather_app/output/launchd_kalshi.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/carmstrong/weather_app/output/launchd_kalshi.err.log</string>
+</dict>
+</plist>

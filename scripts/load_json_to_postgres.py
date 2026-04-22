@@ -472,6 +472,244 @@ on conflict (ticker, pulled_at) do update set
 """
 
 
+REFRESH_LATEST_MARKETPLACE_SQL = r"""
+begin;
+
+create temporary table _latest_marketplace_contracts_refresh on commit drop as
+with latest_run as (
+  select max(pulled_at) as pulled_at
+  from app.scored_market_snapshots
+),
+latest_scores as (
+  select distinct on (sms.ticker)
+    sms.ticker,
+    sms.pulled_at,
+    sms.event_ticker,
+    sms.market_id,
+    sms.forecast_date,
+    sms.adjusted_forecast_max_f,
+    sms.forecast_sigma_f,
+    sms.noaa_forecast_max_f,
+    sms.open_meteo_forecast_max_f,
+    sms.forecast_source_spread_f,
+    sms.model_probability,
+    sms.edge,
+    sms.signal_short,
+    sms.market_context,
+    sms.model_signal,
+    sms.lead_bucket
+  from app.scored_market_snapshots sms
+  cross join latest_run lr
+  where sms.forecast_date is not null
+    and sms.pulled_at >= lr.pulled_at - interval '10 minutes'
+  order by sms.ticker, sms.pulled_at desc
+),
+latest_prices as (
+  select distinct on (kms.ticker)
+    kms.ticker,
+    kms.pulled_at as price_pulled_at,
+    kms.yes_bid_dollars,
+    kms.yes_ask_dollars,
+    kms.no_bid_dollars,
+    kms.no_ask_dollars,
+    kms.last_price_dollars,
+    kms.implied_probability,
+    kms.volume,
+    kms.volume_24h
+  from app.kalshi_market_snapshots kms
+  cross join latest_run lr
+  where kms.pulled_at >= lr.pulled_at - interval '10 minutes'
+  order by kms.ticker, kms.pulled_at desc
+)
+select
+  ls.ticker,
+  ls.pulled_at,
+  ls.forecast_date,
+  ls.adjusted_forecast_max_f,
+  ls.forecast_sigma_f,
+  ls.noaa_forecast_max_f,
+  ls.open_meteo_forecast_max_f,
+  ls.forecast_source_spread_f,
+  ls.model_probability,
+  ls.edge,
+  ls.signal_short,
+  ls.market_context,
+  ls.model_signal,
+  ls.lead_bucket,
+  km.title,
+  km.subtitle,
+  km.series_ticker,
+  km.floor_strike,
+  km.cap_strike,
+  km.functional_strike,
+  km.custom_strike,
+  km.status as market_status,
+  ke.event_date,
+  ke.close_time,
+  ml.market_id,
+  ml.city,
+  ml.event_type,
+  ml.timezone,
+  lp.price_pulled_at,
+  lp.yes_bid_dollars,
+  lp.yes_ask_dollars,
+  lp.no_bid_dollars,
+  lp.no_ask_dollars,
+  lp.last_price_dollars,
+  lp.implied_probability,
+  lp.volume,
+  lp.volume_24h,
+  lower(
+    concat_ws(
+      ' ',
+      coalesce(ml.city, 'Unknown'),
+      km.title,
+      km.custom_strike,
+      km.floor_strike::text,
+      km.cap_strike::text
+    )
+  ) as search_text,
+  now() as refreshed_at
+from latest_scores ls
+join app.kalshi_markets km on km.ticker = ls.ticker
+left join app.kalshi_events ke on ke.event_ticker = ls.event_ticker
+left join app.market_locations ml on ml.market_id = ls.market_id
+left join latest_prices lp on lp.ticker = ls.ticker
+where km.status is distinct from 'closed';
+
+delete from app.latest_marketplace_contracts current_rows
+where not exists (
+  select 1
+  from _latest_marketplace_contracts_refresh refresh_rows
+  where refresh_rows.ticker = current_rows.ticker
+);
+
+insert into app.latest_marketplace_contracts (
+  ticker,
+  pulled_at,
+  forecast_date,
+  adjusted_forecast_max_f,
+  forecast_sigma_f,
+  noaa_forecast_max_f,
+  open_meteo_forecast_max_f,
+  forecast_source_spread_f,
+  model_probability,
+  edge,
+  signal_short,
+  market_context,
+  model_signal,
+  lead_bucket,
+  title,
+  subtitle,
+  series_ticker,
+  floor_strike,
+  cap_strike,
+  functional_strike,
+  custom_strike,
+  market_status,
+  event_date,
+  close_time,
+  market_id,
+  city,
+  event_type,
+  timezone,
+  price_pulled_at,
+  yes_bid_dollars,
+  yes_ask_dollars,
+  no_bid_dollars,
+  no_ask_dollars,
+  last_price_dollars,
+  implied_probability,
+  volume,
+  volume_24h,
+  search_text,
+  refreshed_at
+)
+select
+  ticker,
+  pulled_at,
+  forecast_date,
+  adjusted_forecast_max_f,
+  forecast_sigma_f,
+  noaa_forecast_max_f,
+  open_meteo_forecast_max_f,
+  forecast_source_spread_f,
+  model_probability,
+  edge,
+  signal_short,
+  market_context,
+  model_signal,
+  lead_bucket,
+  title,
+  subtitle,
+  series_ticker,
+  floor_strike,
+  cap_strike,
+  functional_strike,
+  custom_strike,
+  market_status,
+  event_date,
+  close_time,
+  market_id,
+  city,
+  event_type,
+  timezone,
+  price_pulled_at,
+  yes_bid_dollars,
+  yes_ask_dollars,
+  no_bid_dollars,
+  no_ask_dollars,
+  last_price_dollars,
+  implied_probability,
+  volume,
+  volume_24h,
+  search_text,
+  refreshed_at
+from _latest_marketplace_contracts_refresh
+on conflict (ticker) do update set
+  pulled_at = excluded.pulled_at,
+  forecast_date = excluded.forecast_date,
+  adjusted_forecast_max_f = excluded.adjusted_forecast_max_f,
+  forecast_sigma_f = excluded.forecast_sigma_f,
+  noaa_forecast_max_f = excluded.noaa_forecast_max_f,
+  open_meteo_forecast_max_f = excluded.open_meteo_forecast_max_f,
+  forecast_source_spread_f = excluded.forecast_source_spread_f,
+  model_probability = excluded.model_probability,
+  edge = excluded.edge,
+  signal_short = excluded.signal_short,
+  market_context = excluded.market_context,
+  model_signal = excluded.model_signal,
+  lead_bucket = excluded.lead_bucket,
+  title = excluded.title,
+  subtitle = excluded.subtitle,
+  series_ticker = excluded.series_ticker,
+  floor_strike = excluded.floor_strike,
+  cap_strike = excluded.cap_strike,
+  functional_strike = excluded.functional_strike,
+  custom_strike = excluded.custom_strike,
+  market_status = excluded.market_status,
+  event_date = excluded.event_date,
+  close_time = excluded.close_time,
+  market_id = excluded.market_id,
+  city = excluded.city,
+  event_type = excluded.event_type,
+  timezone = excluded.timezone,
+  price_pulled_at = excluded.price_pulled_at,
+  yes_bid_dollars = excluded.yes_bid_dollars,
+  yes_ask_dollars = excluded.yes_ask_dollars,
+  no_bid_dollars = excluded.no_bid_dollars,
+  no_ask_dollars = excluded.no_ask_dollars,
+  last_price_dollars = excluded.last_price_dollars,
+  implied_probability = excluded.implied_probability,
+  volume = excluded.volume,
+  volume_24h = excluded.volume_24h,
+  search_text = excluded.search_text,
+  refreshed_at = excluded.refreshed_at;
+
+commit;
+"""
+
+
 BETS_SQL = r"""
 with payload as (
   select doc from _codex_ingest_payload
@@ -709,6 +947,7 @@ def sync_reference_tables(psql: str, database_url: str) -> None:
 
 def sync_kalshi_payload(psql: str, database_url: str, payload: Any) -> None:
     run_json_ingest(psql, database_url, KALSHI_SQL, payload)
+    refresh_latest_marketplace_contracts(psql, database_url)
 
 
 def sync_weather_payload(psql: str, database_url: str, payload: Any) -> None:
@@ -717,6 +956,11 @@ def sync_weather_payload(psql: str, database_url: str, payload: Any) -> None:
 
 def sync_scored_payload(psql: str, database_url: str, payload: Any) -> None:
     run_json_ingest(psql, database_url, SCORED_SQL, payload)
+    refresh_latest_marketplace_contracts(psql, database_url)
+
+
+def refresh_latest_marketplace_contracts(psql: str, database_url: str) -> None:
+    run_sql_text_file(psql, database_url, REFRESH_LATEST_MARKETPLACE_SQL)
 
 
 def sync_bets_payload(psql: str, database_url: str, payload: Any) -> None:

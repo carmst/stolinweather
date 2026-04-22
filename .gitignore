@@ -7,6 +7,9 @@ __pycache__/
 .venv/
 venv/
 env/
+*.sqlite3
+logs/
+django_app/logs/
 node_modules/
 .vercel/
 output/*

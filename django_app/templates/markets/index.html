@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Stolin Weather Django Control Room</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: radial-gradient(circle at 20% 0%, rgba(109, 235, 253, 0.16), transparent 34%),
+          #070f12;
+        color: #f0f8fc;
+        font-family: Manrope, Inter, system-ui, sans-serif;
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 72px 24px;
+      }
+      a {
+        color: #6debfd;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+        margin-top: 28px;
+      }
+      .card {
+        border: 1px solid rgba(109, 235, 253, 0.16);
+        border-radius: 20px;
+        background: rgba(28, 39, 44, 0.48);
+        padding: 22px;
+      }
+      .label {
+        color: #a4acb0;
+        font-size: 12px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .value {
+        margin-top: 10px;
+        font-size: 36px;
+        font-weight: 800;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Stolin Weather Django Control Room</h1>
+      <p>This is a safe Python/Django mirror of the existing Supabase data. It does not replace the production frontend yet.</p>
+      <p><a href="/admin/">Open Django admin</a></p>
+      <section class="grid" aria-label="Database counts">
+        <div class="card">
+          <div class="label">Market Locations</div>
+          <div class="value">{{ market_location_count }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Kalshi Markets</div>
+          <div class="value">{{ kalshi_market_count }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Weather Snapshots</div>
+          <div class="value">{{ weather_snapshot_count }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Scored Snapshots</div>
+          <div class="value">{{ scored_snapshot_count }}</div>
+        </div>
+        <div class="card">
+          <div class="label">Daily Bets</div>
+          <div class="value">{{ daily_bet_count }}</div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

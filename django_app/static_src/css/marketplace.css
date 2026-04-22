@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background: rgba(28, 39, 44, 0.4);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .glass {
+    background: rgba(28, 39, 44, 0.45);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+  }
+
+  .asymmetric-gradient {
+    background:
+      radial-gradient(circle at top left, rgba(109, 235, 253, 0.08), transparent 40%),
+      radial-gradient(circle at bottom right, rgba(255, 115, 72, 0.05), transparent 40%);
+  }
+
+  .detail-gradient {
+    background: radial-gradient(circle at 20% 0%, rgba(109, 235, 253, 0.12), transparent 34%), #070f12;
+  }
+
+  .text-glow {
+    text-shadow: 0 0 15px rgba(109, 235, 253, 0.4);
+  }
+
+  .watchlist-edge-row-primary {
+    background:
+      linear-gradient(90deg, rgba(109, 235, 253, 0.14), transparent 34%),
+      rgba(109, 235, 253, 0.025);
+    box-shadow:
+      inset 4px 0 0 rgba(109, 235, 253, 0.92),
+      inset 0 1px 0 rgba(109, 235, 253, 0.18),
+      inset 0 -1px 0 rgba(109, 235, 253, 0.12);
+  }
+
+  .watchlist-edge-row-secondary {
+    background:
+      linear-gradient(90deg, rgba(255, 115, 72, 0.13), transparent 34%),
+      rgba(255, 115, 72, 0.025);
+    box-shadow:
+      inset 4px 0 0 rgba(255, 115, 72, 0.9),
+      inset 0 1px 0 rgba(255, 115, 72, 0.16),
+      inset 0 -1px 0 rgba(255, 115, 72, 0.1);
+  }
+
+  .marketplace-edge-card-primary {
+    background:
+      linear-gradient(135deg, rgba(109, 235, 253, 0.13), transparent 34%),
+      rgba(28, 39, 44, 0.45);
+    box-shadow:
+      0 0 0 1px rgba(109, 235, 253, 0.2),
+      0 0 32px rgba(109, 235, 253, 0.12),
+      inset 0 0 0 1px rgba(109, 235, 253, 0.13);
+  }
+
+  .marketplace-edge-card-secondary {
+    background:
+      linear-gradient(135deg, rgba(255, 115, 72, 0.12), transparent 34%),
+      rgba(28, 39, 44, 0.45);
+    box-shadow:
+      0 0 0 1px rgba(255, 115, 72, 0.18),
+      0 0 32px rgba(255, 115, 72, 0.1),
+      inset 0 0 0 1px rgba(255, 115, 72, 0.12);
+  }
+
+  .history-grid {
+    background:
+      linear-gradient(rgba(109, 235, 253, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(109, 235, 253, 0.035) 1px, transparent 1px),
+      radial-gradient(circle at 22% 0%, rgba(109, 235, 253, 0.12), transparent 34%),
+      radial-gradient(circle at 85% 22%, rgba(255, 115, 72, 0.07), transparent 28%),
+      #070f12;
+    background-size: 38px 38px, 38px 38px, auto, auto, auto;
+  }
+
+  .history-node {
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+    z-index: 20;
+  }
+
+  .history-pulse {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 18px rgba(109, 235, 253, 0.22);
+  }
+
+  .history-dot {
+    left: 50%;
+    top: 50%;
+    width: 9px;
+    height: 9px;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 14px currentColor;
+  }
+
+  .history-map-panel {
+    background:
+      radial-gradient(circle at 52% 54%, rgba(109, 235, 253, 0.09), transparent 27%),
+      linear-gradient(180deg, rgba(1, 7, 10, 0.2), rgba(1, 7, 10, 0.58)),
+      #03090d;
+  }
+
+  .history-us-map {
+    opacity: 0.95;
+  }
+
+  .history-map-shape > path {
+    fill: rgba(11, 44, 58, 0.76);
+    stroke: rgba(109, 235, 253, 0.84);
+    stroke-width: 3;
+    stroke-linejoin: round;
+  }
+
+  .history-state-lines {
+    fill: none;
+    stroke: rgba(109, 235, 253, 0.42);
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+}

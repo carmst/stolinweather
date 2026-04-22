@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+{% load static %}
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>STOLIN WEATHER | Django Marketplace</title>
+    <link href="{% static 'markets/marketplace.css' %}" rel="stylesheet" />
+  </head>
+  <body class="bg-background text-on-surface font-body selection:bg-primary/30 min-h-screen asymmetric-gradient">
+    <header class="fixed top-0 w-full z-50 bg-slate-950/60 backdrop-blur-xl bg-gradient-to-b from-slate-900/20 to-transparent shadow-2xl shadow-cyan-900/10">
+      <nav class="flex justify-between items-center px-8 py-4 max-w-[1920px] mx-auto">
+        <div class="flex items-center gap-12">
+          <a class="text-2xl font-black text-cyan-400 italic tracking-tighter font-headline uppercase" href="/">STOLIN WEATHER</a>
+          <div class="hidden md:flex items-center gap-8 font-headline font-bold tracking-tight">
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/">Control Room</a>
+            <a class="text-cyan-400 border-b-2 border-cyan-400 pb-1" href="/marketplace/">Marketplace</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/watchlist/">Watchlist</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/history/">History</a>
+            <a class="text-slate-400 hover:text-cyan-200 transition-colors" href="/admin/">Admin</a>
+          </div>
+        </div>
+        <form class="relative hidden lg:block" method="get" action="/marketplace/">
+          <input type="hidden" name="day" value="{{ day }}" />
+          <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm" aria-hidden="true">Search</span>
+          <input
+            class="bg-slate-950/50 border-none rounded-xl pl-16 pr-4 py-2 text-sm text-on-surface-variant focus:ring-1 focus:ring-primary w-64"
+            name="q"
+            value="{{ search }}"
+            placeholder="Search markets..."
+            type="text"
+          />
+        </form>
+      </nav>
+    </header>
+
+    <main class="pt-28 pb-20 px-8 max-w-[1400px] mx-auto">
+      <div class="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div>
+          <h1 class="text-5xl font-headline font-extrabold tracking-tighter text-on-surface mb-2">Marketplace</h1>
+          <p class="text-on-surface-variant max-w-xl font-label uppercase tracking-widest text-xs">
+            Django rendered · {{ contract_count }} of {{ total_contract_count }} contracts{% if updated_at %} · updated {{ updated_at|date:"M j, g:i A" }}{% endif %}
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <div class="bg-surface-container-high rounded-xl p-1 flex gap-1">
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if day == 'today' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/marketplace/?day=today{% if search %}&q={{ search|urlencode }}{% endif %}">Today</a>
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest {% if day == 'tomorrow' %}bg-primary text-on-primary-container rounded-lg font-bold{% else %}text-on-surface-variant hover:text-on-surface transition-colors{% endif %}" href="/marketplace/?day=tomorrow{% if search %}&q={{ search|urlencode }}{% endif %}">Tomorrow</a>
+          </div>
+          <div class="bg-surface-container-high rounded-xl p-1 flex gap-1">
+            <a class="px-4 py-2 text-xs font-label uppercase tracking-widest text-on-surface rounded-lg bg-surface-variant hover:text-primary transition-colors" href="/admin/">Admin</a>
+          </div>
+        </div>
+      </div>
+
+      <section class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div class="glass-card rounded-2xl border border-white/5 p-5">
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Active Date</div>
+          <div class="text-2xl font-headline font-extrabold mt-2">{{ active_date }}</div>
+        </div>
+        <div class="glass-card rounded-2xl border border-white/5 p-5">
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Positive YES EV</div>
+          <div class="text-2xl font-headline font-extrabold mt-2 text-secondary">{{ positive_yes_count }}</div>
+        </div>
+        <div class="glass-card rounded-2xl border border-white/5 p-5">
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Backtested Edge</div>
+          <div class="text-2xl font-headline font-extrabold mt-2 text-primary">{{ high_confidence_count }}</div>
+          <p class="text-[10px] font-label uppercase tracking-widest text-outline mt-2">Side confidence {{ high_confidence_threshold_display }}+</p>
+        </div>
+        <div class="glass-card rounded-2xl border border-white/5 p-5">
+          <div class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">Contracts</div>
+          <div class="text-2xl font-headline font-extrabold mt-2 text-on-surface">{{ contract_count }}</div>
+        </div>
+      </section>
+
+      {% if contracts %}
+        <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+          {% for contract in contracts %}
+            <article class="glass-card rounded-3xl p-8 relative overflow-hidden group transition-all duration-500 border {% if contract.is_backtested_edge %}{% if contract.theme == 'low' %}marketplace-edge-card-primary border-primary/40{% else %}marketplace-edge-card-secondary border-secondary/40{% endif %}{% elif contract.theme == 'low' %}border-primary/20{% else %}border-secondary/20{% endif %}">
+              <div class="absolute top-0 right-0 p-6 opacity-20 group-hover:opacity-100 transition-opacity">
+                <span class="text-xs font-label font-bold uppercase tracking-widest {% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">
+                  {% if contract.theme == 'low' %}Low{% else %}High{% endif %}
+                </span>
+              </div>
+
+              <div class="flex flex-col gap-8 h-full">
+                <div>
+                  <span class="text-xs font-label font-bold tracking-[0.2em] {% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %} uppercase mb-2 block">
+                    {{ contract.lead_bucket|default:"Market" }}
+                  </span>
+                  {% if contract.is_backtested_edge %}
+                    <div class="mb-3 inline-flex items-center gap-2 rounded border {% if contract.theme == 'low' %}border-primary/30 bg-primary/10 text-primary{% else %}border-secondary/30 bg-secondary/10 text-secondary{% endif %} px-3 py-1 text-[10px] font-label uppercase tracking-widest">
+                      <span>Backtested Edge</span>
+                      <span>{{ contract.watchlist_side_display }}</span>
+                      <span>{{ contract.watchlist_side_probability_display }} model</span>
+                      <span>{{ contract.watchlist_side_cost_display }} entry</span>
+                      <span>{{ contract.watchlist_side_ev_display }} EV</span>
+                    </div>
+                  {% endif %}
+                  <h3 class="text-3xl font-headline font-extrabold tracking-tight">{{ contract.location }}: {{ contract.contract_label }}</h3>
+                  <p class="text-on-surface-variant text-sm font-label mt-1">Model high {{ contract.model_high_display }} · NOAA {{ contract.noaa_high_display }} · OM {{ contract.open_meteo_high_display }}</p>
+                </div>
+
+                <div class="flex items-center justify-between">
+                  <div class="flex flex-col">
+                    <span class="text-[0.6rem] font-label text-on-surface-variant uppercase tracking-widest mb-1">
+                      {% if contract.is_backtested_edge %}Model {{ contract.watchlist_side_display }}{% else %}Stolin YES{% endif %}
+                    </span>
+                    <div class="text-5xl font-headline font-black {% if contract.theme == 'low' %}text-primary text-glow{% else %}text-secondary{% endif %} italic">
+                      {% if contract.is_backtested_edge %}{{ contract.watchlist_side_probability_display }}{% else %}{{ contract.model_probability_display }}{% endif %}
+                    </div>
+                  </div>
+                  <div class="w-px h-12 bg-outline-variant/30"></div>
+                  <div class="flex flex-col items-end">
+                    <span class="text-[0.6rem] font-label text-on-surface-variant uppercase tracking-widest mb-1">
+                      {% if contract.is_backtested_edge %}Entry Cost{% else %}Market YES{% endif %}
+                    </span>
+                    <div class="text-4xl font-headline font-bold text-on-surface">
+                      {% if contract.is_backtested_edge %}{{ contract.watchlist_side_cost_display }}{% else %}{{ contract.market_probability_display }}{% endif %}
+                    </div>
+                  </div>
+                </div>
+
+                <div class="space-y-3">
+                  <div class="flex justify-between items-center text-[0.65rem] font-label uppercase tracking-widest text-on-surface-variant">
+                    {% if contract.is_backtested_edge %}
+                      <span>{{ contract.watchlist_side_display }} {{ contract.watchlist_side_cost_display }}</span>
+                      <span class="{% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">{{ contract.watchlist_side_ev_display }} EV</span>
+                    {% else %}
+                      <span>YES {{ contract.yes_cost_display }}</span>
+                      <span class="{% if contract.yes_ev and contract.yes_ev > 0 %}text-secondary{% else %}text-on-surface-variant{% endif %}">{{ contract.yes_ev_display }} EV</span>
+                    {% endif %}
+                  </div>
+                  <div class="space-y-3">
+                    <div class="flex justify-between text-[0.6rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">
+                      <span>Forecast window</span>
+                      <span>{{ contract.current_hour_display }}</span>
+                    </div>
+                    <div class="relative h-16 w-full flex items-end gap-1">
+                      {% for bar in contract.bar_heights %}
+                        <div
+                          class="w-full rounded-sm transition-all {% if bar.active %}{% if contract.theme == 'low' %}bg-primary ring-2 ring-offset-2 ring-offset-surface ring-primary/40{% else %}bg-secondary ring-2 ring-offset-2 ring-offset-surface ring-secondary/40{% endif %}{% else %}{% if contract.theme == 'low' %}bg-primary/15{% else %}bg-secondary/15{% endif %}{% endif %}"
+                          style="height: {{ bar.height }}%"
+                          title="{{ bar.label }}"
+                        ></div>
+                      {% endfor %}
+                    </div>
+                    <div class="flex justify-between text-[0.55rem] font-label uppercase tracking-[0.18em] text-on-surface-variant/70">
+                      <span>12a</span>
+                      <span>8a</span>
+                      <span>4p</span>
+                      <span>8p</span>
+                    </div>
+                  </div>
+                </div>
+
+                <p class="text-sm leading-relaxed text-on-surface-variant">{{ contract.signal_summary }}</p>
+                {% if contract.is_backtested_edge %}
+                  <p class="text-[0.65rem] font-label uppercase tracking-[0.18em] {% if contract.theme == 'low' %}text-primary{% else %}text-secondary{% endif %}">
+                    Edge is on {{ contract.watchlist_side_display }}, not necessarily YES.
+                  </p>
+                {% elif contract.yes_ev is None or contract.yes_ev <= 0 %}
+                  <p class="text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">No YES edge from the current model.</p>
+                {% endif %}
+
+                <div class="flex items-center justify-between text-[0.65rem] font-label uppercase tracking-[0.18em] text-on-surface-variant">
+                  <a class="hover:text-primary transition-colors" href="{{ contract.detail_url }}">Forecast detail</a>
+                  <a class="hover:text-secondary transition-colors" href="{{ contract.kalshi_url }}" target="_blank" rel="noreferrer">Kalshi</a>
+                </div>
+
+                <a class="w-full py-4 rounded-2xl font-headline font-extrabold tracking-tight transition-transform active:scale-[0.98] mt-auto text-center {% if contract.is_backtested_edge or contract.yes_ev and contract.yes_ev > 0 %}{% if contract.theme == 'low' %}bg-gradient-to-r from-primary to-primary-container text-on-primary-container{% else %}bg-gradient-to-r from-secondary to-secondary-container text-on-secondary-container{% endif %}{% else %}bg-surface-variant/40 hover:bg-surface-variant text-on-surface border border-white/5{% endif %}" href="{{ contract.detail_url }}">
+                  {% if contract.is_backtested_edge %}{{ contract.edge_action_label }}{% else %}{{ contract.action_label }}{% endif %}
+                </a>
+              </div>
+            </article>
+          {% endfor %}
+        </section>
+      {% else %}
+        <div class="glass-card rounded-3xl p-12 border border-white/5 text-center">
+          <h2 class="text-2xl font-headline font-extrabold">No contracts found</h2>
+          <p class="text-on-surface-variant mt-2">Try switching day filters or clearing the search.</p>
+        </div>
+      {% endif %}
+    </main>
+  </body>
+</html>

@@ -254,15 +254,24 @@ def calibrated_sigma(
 ) -> float:
     heuristic = estimate_sigma(snapshot, daily_row)
     location = snapshot.get("market", {}).get("location")
-    month_key = str(int(forecast_date[5:7]))
     location_stats = calibration.get("locations", {}).get(location, {})
-    month_stats = location_stats.get("monthly", {}).get(month_key)
+    climatology_stats = calibration_stats_for_date(location_stats, forecast_date)
 
-    if not month_stats:
+    if not climatology_stats:
         return heuristic
 
-    climatology_sigma = float(month_stats.get("sigma_f", heuristic))
+    climatology_sigma = float(climatology_stats.get("sigma_f", heuristic))
     return round((0.65 * heuristic) + (0.35 * climatology_sigma), 2)
+
+
+def date_bucket_keys(forecast_date: str) -> tuple[str, str]:
+    parsed = datetime.strptime(forecast_date, "%Y-%m-%d").date()
+    return str(int(parsed.isocalendar().week)), str(parsed.month)
+
+
+def calibration_stats_for_date(location_stats: dict[str, Any], forecast_date: str) -> dict[str, Any] | None:
+    week_key, month_key = date_bucket_keys(forecast_date)
+    return location_stats.get("weekly", {}).get(week_key) or location_stats.get("monthly", {}).get(month_key)
 
 
 def forecast_target_timestamp(snapshot: dict[str, Any], forecast_date: str) -> datetime:
@@ -292,17 +301,29 @@ def apply_forecast_error_adjustment(
     lead_bucket: str,
     error_model: dict[str, Any],
 ) -> tuple[float, float, dict[str, Any] | None]:
-    month_key = str(int(forecast_date[5:7]))
-    bucket_stats = (
-        error_model.get("locations", {})
-        .get(location, {})
-        .get(month_key, {})
-        .get(lead_bucket)
-    )
+    week_key, month_key = date_bucket_keys(forecast_date)
+    weekly_stats = error_model.get("weekly_locations", {}).get(location, {}).get(week_key, {}).get(lead_bucket)
+    monthly_stats = error_model.get("locations", {}).get(location, {}).get(month_key, {}).get(lead_bucket)
+    bucket_stats = weekly_stats or monthly_stats
     if not bucket_stats:
         return adjusted_mean, sigma, None
 
     mean_error = float(bucket_stats.get("mean_error_f", 0.0))
+    if weekly_stats and monthly_stats:
+        weekly_count = float(weekly_stats.get("count") or 0)
+        weekly_mean = float(weekly_stats.get("mean_error_f", 0.0))
+        monthly_mean = float(monthly_stats.get("mean_error_f", 0.0))
+        blend_weight = weekly_count / (weekly_count + 500.0)
+        blended_mean = (blend_weight * weekly_mean) + ((1.0 - blend_weight) * monthly_mean)
+        max_weekly_delta = 0.75
+        mean_error = max(monthly_mean - max_weekly_delta, min(monthly_mean + max_weekly_delta, blended_mean))
+        bucket_stats = {
+            **weekly_stats,
+            "bucket_source": "weekly_shrunk_to_month",
+            "raw_weekly_mean_error_f": weekly_mean,
+            "monthly_mean_error_f": monthly_mean,
+            "mean_error_f": round(mean_error, 2),
+        }
     sigma_error = float(bucket_stats.get("sigma_error_f", sigma))
     corrected_mean = round(adjusted_mean - mean_error, 2)
     corrected_sigma = round((0.7 * sigma) + (0.3 * sigma_error), 2)
@@ -312,13 +333,8 @@ def apply_forecast_error_adjustment(
 def climatology_adjusted_mean(
     forecast_max: float, location: str, forecast_date: str, calibration: dict[str, Any]
 ) -> tuple[float, dict[str, Any] | None]:
-    month_key = str(int(forecast_date[5:7]))
-    month_stats = (
-        calibration.get("locations", {})
-        .get(location, {})
-        .get("monthly", {})
-        .get(month_key)
-    )
+    location_stats = calibration.get("locations", {}).get(location, {})
+    month_stats = calibration_stats_for_date(location_stats, forecast_date)
     if not month_stats:
         return forecast_max, None
 

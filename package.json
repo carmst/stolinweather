@@ -4,9 +4,13 @@
   "private": true,
   "description": "AtmosEdge local dashboard and API for weather-market opportunity tracking.",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "build:django-css": "tailwindcss -i ./django_app/static_src/css/marketplace.css -o ./django_app/static/markets/marketplace.css --minify"
   },
   "dependencies": {
     "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
   }
 }
