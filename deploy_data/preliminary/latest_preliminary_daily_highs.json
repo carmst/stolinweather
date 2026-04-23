@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-04-13T17:51:14Z",
+  "generated_at": "2026-04-13T14:51:12Z",
   "source": "noaa-preliminary-daily-high-log-v2",
   "rows": [
     {
@@ -2526,8 +2526,8 @@
       "market_id": "temp-high-atlanta",
       "location": "Atlanta, GA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 78.8,
-      "pulled_at": "2026-04-13T17:40:35Z",
+      "preliminary_high_f": 69.8,
+      "pulled_at": "2026-04-13T04:20:38Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KATL",
@@ -2536,16 +2536,16 @@
         "KHMP",
         "KMGE"
       ],
-      "observation_count": 77,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:20:00+00:00"
+      "observation_count": 59,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T04:05:00+00:00"
     },
     {
       "market_id": "temp-high-austin",
       "location": "Austin, TX",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 82.4,
-      "pulled_at": "2026-04-13T17:50:36Z",
+      "preliminary_high_f": 73.4,
+      "pulled_at": "2026-04-13T14:40:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KAUS",
@@ -2554,16 +2554,16 @@
         "KHYI",
         "KRYW"
       ],
-      "observation_count": 73,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:30:00+00:00"
+      "observation_count": 55,
+      "last_observed_at": "2026-04-13T14:35:00+00:00",
+      "max_observed_at": "2026-04-13T14:20:00+00:00"
     },
     {
       "market_id": "temp-high-boston",
       "location": "Boston, MA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 64.4,
-      "pulled_at": "2026-04-13T17:50:36Z",
+      "preliminary_high_f": 57.2,
+      "pulled_at": "2026-04-13T14:40:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KBOS",
@@ -2572,16 +2572,16 @@
         "KBVY",
         "KLWM"
       ],
-      "observation_count": 76,
-      "last_observed_at": "2026-04-13T17:35:00+00:00",
-      "max_observed_at": "2026-04-13T17:35:00+00:00"
+      "observation_count": 58,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T14:20:00+00:00"
     },
     {
       "market_id": "temp-high-chicago",
       "location": "Chicago, IL",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 73.4,
-      "pulled_at": "2026-04-13T17:40:35Z",
+      "preliminary_high_f": 66.2,
+      "pulled_at": "2026-04-13T14:01:02Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KMDW",
@@ -2590,16 +2590,16 @@
         "KLOT",
         "KGYY"
       ],
-      "observation_count": 72,
-      "last_observed_at": "2026-04-13T17:35:00+00:00",
-      "max_observed_at": "2026-04-13T17:20:00+00:00"
+      "observation_count": 55,
+      "last_observed_at": "2026-04-13T14:35:00+00:00",
+      "max_observed_at": "2026-04-13T13:40:00+00:00"
     },
     {
       "market_id": "temp-high-dallas",
       "location": "Dallas, TX",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 80.6,
-      "pulled_at": "2026-04-13T17:50:36Z",
+      "preliminary_high_f": 73.4,
+      "pulled_at": "2026-04-13T14:20:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KDAL",
@@ -2608,16 +2608,16 @@
         "KLNC",
         "KDFW"
       ],
-      "observation_count": 75,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:30:00+00:00"
+      "observation_count": 57,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T14:00:00+00:00"
     },
     {
       "market_id": "temp-high-denver",
       "location": "Denver, CO",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 63.14,
-      "pulled_at": "2026-04-13T17:50:36Z",
+      "preliminary_high_f": 55.58,
+      "pulled_at": "2026-04-13T09:10:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KBKF",
@@ -2626,16 +2626,16 @@
         "KDEN",
         "KEIK"
       ],
-      "observation_count": 9,
-      "last_observed_at": "2026-04-13T16:58:00+00:00",
-      "max_observed_at": "2026-04-13T16:58:00+00:00"
+      "observation_count": 6,
+      "last_observed_at": "2026-04-13T13:58:00+00:00",
+      "max_observed_at": "2026-04-13T07:58:00+00:00"
     },
     {
       "market_id": "temp-high-houston",
       "location": "Houston, TX",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 80.6,
-      "pulled_at": "2026-04-13T16:40:36Z",
+      "preliminary_high_f": 77.0,
+      "pulled_at": "2026-04-13T14:50:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KHOU",
@@ -2644,16 +2644,16 @@
         "KT41",
         "KSGR"
       ],
-      "observation_count": 72,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T16:20:00+00:00"
+      "observation_count": 56,
+      "last_observed_at": "2026-04-13T14:35:00+00:00",
+      "max_observed_at": "2026-04-13T14:35:00+00:00"
     },
     {
       "market_id": "temp-high-las-vegas",
       "location": "Las Vegas, NV",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 62.6,
-      "pulled_at": "2026-04-13T17:30:41Z",
+      "preliminary_high_f": 60.8,
+      "pulled_at": "2026-04-13T07:20:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KVGT",
@@ -2662,16 +2662,16 @@
         "E5967",
         "KHND"
       ],
-      "observation_count": 62,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:15:00+00:00"
+      "observation_count": 44,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T07:05:00+00:00"
     },
     {
       "market_id": "temp-high-los-angeles",
       "location": "Los Angeles, CA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 62.6,
-      "pulled_at": "2026-04-13T16:50:37Z",
+      "preliminary_high_f": 60.8,
+      "pulled_at": "2026-04-13T07:40:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KLAX",
@@ -2680,16 +2680,16 @@
         "FHMC1",
         "KLGB"
       ],
-      "observation_count": 61,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T16:30:00+00:00"
+      "observation_count": 44,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T07:20:00+00:00"
     },
     {
       "market_id": "temp-high-miami",
       "location": "Miami, FL",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 80.06,
-      "pulled_at": "2026-04-13T17:10:36Z",
+      "preliminary_high_f": 77.0,
+      "pulled_at": "2026-04-13T14:50:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KMIA",
@@ -2698,9 +2698,9 @@
         "KHWO",
         "KFLL"
       ],
-      "observation_count": 13,
-      "last_observed_at": "2026-04-13T16:53:00+00:00",
-      "max_observed_at": "2026-04-13T15:53:00+00:00"
+      "observation_count": 10,
+      "last_observed_at": "2026-04-13T13:53:00+00:00",
+      "max_observed_at": "2026-04-13T13:53:00+00:00"
     },
     {
       "market_id": "temp-high-minneapolis",
@@ -2716,16 +2716,16 @@
         "KANE",
         "KFCM"
       ],
-      "observation_count": 72,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
+      "observation_count": 54,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
       "max_observed_at": "2026-04-13T05:05:00+00:00"
     },
     {
       "market_id": "temp-high-new-orleans",
       "location": "New Orleans, LA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 80.6,
-      "pulled_at": "2026-04-13T17:30:41Z",
+      "preliminary_high_f": 75.2,
+      "pulled_at": "2026-04-13T14:10:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KNEW",
@@ -2734,16 +2734,16 @@
         "KASD",
         "KGAO"
       ],
-      "observation_count": 75,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:15:00+00:00"
+      "observation_count": 58,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T14:00:00+00:00"
     },
     {
       "market_id": "temp-high-nyc",
       "location": "New York City, NY",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 71.96,
-      "pulled_at": "2026-04-13T17:50:36Z",
+      "preliminary_high_f": 62.96,
+      "pulled_at": "2026-04-13T14:50:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KNYC",
@@ -2752,16 +2752,16 @@
         "KTEB",
         "KJFK"
       ],
-      "observation_count": 17,
-      "last_observed_at": "2026-04-13T16:51:00+00:00",
-      "max_observed_at": "2026-04-13T16:51:00+00:00"
+      "observation_count": 14,
+      "last_observed_at": "2026-04-13T14:36:00+00:00",
+      "max_observed_at": "2026-04-13T14:36:00+00:00"
     },
     {
       "market_id": "temp-high-oklahoma-city",
       "location": "Oklahoma City, OK",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 80.6,
-      "pulled_at": "2026-04-13T17:30:41Z",
+      "preliminary_high_f": 69.8,
+      "pulled_at": "2026-04-13T05:20:37Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KOKC",
@@ -2770,16 +2770,16 @@
         "KTIK",
         "KCHK"
       ],
-      "observation_count": 73,
-      "last_observed_at": "2026-04-13T17:35:00+00:00",
-      "max_observed_at": "2026-04-13T17:15:00+00:00"
+      "observation_count": 57,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T05:05:00+00:00"
     },
     {
       "market_id": "temp-high-philadelphia",
       "location": "Philadelphia, PA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 77.0,
-      "pulled_at": "2026-04-13T17:00:54Z",
+      "preliminary_high_f": 69.8,
+      "pulled_at": "2026-04-13T14:30:46Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KPHL",
@@ -2788,16 +2788,16 @@
         "KVAY",
         "KILG"
       ],
-      "observation_count": 79,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T16:40:00+00:00"
+      "observation_count": 62,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T14:10:00+00:00"
     },
     {
       "market_id": "temp-high-phoenix",
       "location": "Phoenix, AZ",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 73.4,
-      "pulled_at": "2026-04-13T17:30:41Z",
+      "preliminary_high_f": 69.8,
+      "pulled_at": "2026-04-13T07:20:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KPHX",
@@ -2806,16 +2806,16 @@
         "KDVT",
         "KGYR"
       ],
-      "observation_count": 61,
-      "last_observed_at": "2026-04-13T17:35:00+00:00",
-      "max_observed_at": "2026-04-13T17:15:00+00:00"
+      "observation_count": 43,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T07:10:00+00:00"
     },
     {
       "market_id": "temp-high-san-antonio",
       "location": "San Antonio, TX",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 81.68,
-      "pulled_at": "2026-04-13T17:50:36Z",
+      "preliminary_high_f": 74.48,
+      "pulled_at": "2026-04-13T14:50:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KSKF",
@@ -2824,16 +2824,16 @@
         "KRND",
         "KCVB"
       ],
-      "observation_count": 18,
-      "last_observed_at": "2026-04-13T16:55:00+00:00",
-      "max_observed_at": "2026-04-13T16:55:00+00:00"
+      "observation_count": 12,
+      "last_observed_at": "2026-04-13T13:55:00+00:00",
+      "max_observed_at": "2026-04-13T13:55:00+00:00"
     },
     {
       "market_id": "temp-high-san-francisco",
       "location": "San Francisco, CA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 57.2,
-      "pulled_at": "2026-04-13T17:20:37Z",
+      "preliminary_high_f": 53.6,
+      "pulled_at": "2026-04-13T07:30:42Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KSFO",
@@ -2842,16 +2842,16 @@
         "SFOC1",
         "OAMC1"
       ],
-      "observation_count": 58,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:00:00+00:00"
+      "observation_count": 42,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T07:10:00+00:00"
     },
     {
       "market_id": "temp-high-seattle",
       "location": "Seattle, WA",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 50.0,
-      "pulled_at": "2026-04-13T17:20:37Z",
+      "preliminary_high_f": 48.2,
+      "pulled_at": "2026-04-13T07:20:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KSEA",
@@ -2860,16 +2860,16 @@
         "E6690",
         "SEAW1"
       ],
-      "observation_count": 59,
-      "last_observed_at": "2026-04-13T17:30:00+00:00",
-      "max_observed_at": "2026-04-13T17:00:00+00:00"
+      "observation_count": 43,
+      "last_observed_at": "2026-04-13T14:30:00+00:00",
+      "max_observed_at": "2026-04-13T07:00:00+00:00"
     },
     {
       "market_id": "temp-high-washington-dc",
       "location": "Washington, DC",
       "forecast_date": "2026-04-13",
-      "preliminary_high_f": 78.8,
-      "pulled_at": "2026-04-13T16:01:00Z",
+      "preliminary_high_f": 73.4,
+      "pulled_at": "2026-04-13T14:50:36Z",
       "provider": "noaa-nws-intraday-max",
       "stations": [
         "KDCA",
@@ -2878,9 +2878,9 @@
         "KDAA",
         "KFME"
       ],
-      "observation_count": 75,
-      "last_observed_at": "2026-04-13T17:35:00+00:00",
-      "max_observed_at": "2026-04-13T15:40:00+00:00"
+      "observation_count": 57,
+      "last_observed_at": "2026-04-13T14:35:00+00:00",
+      "max_observed_at": "2026-04-13T14:35:00+00:00"
     }
   ]
 }
