@@ -10,16 +10,16 @@ api/auth-config.js
 
 # Django owns production routes now. Keep legacy static pages out of the
 # Vercel filesystem so they do not beat the Django rewrite.
-index.html
-landing.html
-marketplace.html
-watchlist.html
-history.html
-market-detail.html
-methodology.html
-new_history.html
-profile.html
-auth.html
+/index.html
+/landing.html
+/marketplace.html
+/watchlist.html
+/history.html
+/market-detail.html
+/methodology.html
+/new_history.html
+/profile.html
+/auth.html
 
 # Local runtime state and archives
 output/**
