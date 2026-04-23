@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -20,9 +21,11 @@ WATCHLIST_CONFIG_PATH = REPO_DIR / "config" / "watchlist.json"
 WATCHLIST_CONFIDENCE_THRESHOLD = 0.87
 RESOLVED_BETS_DIR = REPO_DIR / "output" / "bets" / "resolved"
 DEPLOY_EDGE_STRATEGY_PATH = REPO_DIR / "deploy_data" / "bets" / "latest_edge_strategy_summary.json"
+DEPLOY_SCORED_MARKETS_PATH = REPO_DIR / "deploy_data" / "models" / "latest_scored_markets.json"
 EDGE_STRATEGY_STARTING_BANKROLL = 100.0
 EDGE_STRATEGY_RISK_PCT = 0.01
 EDGE_STRATEGY_LOCAL_TZ = ZoneInfo("America/New_York")
+USE_DEPLOY_MARKET_DATA = os.environ.get("VERCEL") == "1" or os.environ.get("DJANGO_USE_DEPLOY_MARKET_DATA") == "1"
 WEATHER_FORECAST_PATHS = [
     REPO_DIR / "output" / "weather" / "latest_forecasts_noaa.json",
     REPO_DIR / "output" / "weather" / "latest_forecasts.json",
@@ -156,10 +159,13 @@ def get_marketplace_context(filters: MarketplaceFilters) -> dict[str, Any]:
     started_at = time.perf_counter()
     day_offset = 1 if filters.day == "tomorrow" else 0
     search = filters.search.strip().lower()
-    raw_rows = _fetch_rows(
-        MARKETPLACE_SQL,
-        params=(day_offset, search, f"%{search}%"),
-    )
+    if USE_DEPLOY_MARKET_DATA:
+        raw_rows = _fetch_deploy_market_rows(day_offset, search=search, log_label="marketplace_deploy_fetch")
+    else:
+        raw_rows = _fetch_rows(
+            MARKETPLACE_SQL,
+            params=(day_offset, search, f"%{search}%"),
+        )
     metadata = _marketplace_metadata_from_rows(raw_rows) or _fetch_marketplace_metadata(day_offset)
 
     normalize_started_at = time.perf_counter()
@@ -204,11 +210,14 @@ def get_marketplace_context(filters: MarketplaceFilters) -> dict[str, Any]:
 def get_market_detail_context(ticker: str) -> dict[str, Any] | None:
     started_at = time.perf_counter()
     normalized_ticker = ticker.strip().upper()
-    raw_rows = _fetch_rows(
-        MARKET_DETAIL_SQL,
-        params=(normalized_ticker,),
-        log_label="market_detail_fetch",
-    )
+    if USE_DEPLOY_MARKET_DATA:
+        raw_rows = _fetch_deploy_market_rows(0, ticker=normalized_ticker, log_label="market_detail_deploy_fetch")
+    else:
+        raw_rows = _fetch_rows(
+            MARKET_DETAIL_SQL,
+            params=(normalized_ticker,),
+            log_label="market_detail_fetch",
+        )
     if raw_rows:
         row = _normalize_row(raw_rows[0])
         row["hourly_chart"] = _build_hourly_chart(row)
@@ -231,7 +240,10 @@ def get_market_detail_context(ticker: str) -> dict[str, Any] | None:
 def get_edge_ticker_context(day: str = "today", limit: int = 16) -> dict[str, Any]:
     started_at = time.perf_counter()
     day_offset = 1 if day == "tomorrow" else 0
-    raw_rows = _fetch_rows(WATCHLIST_SQL, params=(day_offset,), log_label="home_edge_ticker_fetch")
+    if USE_DEPLOY_MARKET_DATA:
+        raw_rows = _fetch_deploy_market_rows(day_offset, log_label="home_edge_ticker_deploy_fetch")
+    else:
+        raw_rows = _fetch_rows(WATCHLIST_SQL, params=(day_offset,), log_label="home_edge_ticker_fetch")
     normalized_rows = [_normalize_row(row) for row in raw_rows]
     edge_rows: list[dict[str, Any]] = []
     for side in ("yes", "no"):
@@ -269,7 +281,10 @@ def get_watchlist_context(filters: MarketplaceFilters) -> dict[str, Any]:
     started_at = time.perf_counter()
     day_offset = 1 if filters.day == "tomorrow" else 0
     config = _load_watchlist_config()
-    raw_rows = _fetch_rows(WATCHLIST_SQL, params=(day_offset,), log_label="watchlist_fetch")
+    if USE_DEPLOY_MARKET_DATA:
+        raw_rows = _fetch_deploy_market_rows(day_offset, log_label="watchlist_deploy_fetch")
+    else:
+        raw_rows = _fetch_rows(WATCHLIST_SQL, params=(day_offset,), log_label="watchlist_fetch")
     metadata = _marketplace_metadata_from_rows(raw_rows) or _fetch_marketplace_metadata(day_offset)
 
     normalized_rows = [_normalize_row(row) for row in raw_rows]
@@ -363,12 +378,118 @@ def _fetch_rows(
 
 
 def _fetch_marketplace_metadata(day_offset: int) -> dict[str, Any]:
+    if USE_DEPLOY_MARKET_DATA:
+        return _deploy_market_metadata(day_offset)
     rows = _fetch_rows(
         MARKETPLACE_METADATA_SQL,
         params=(day_offset,),
         log_label="marketplace_metadata_fetch",
     )
     return rows[0] if rows else {}
+
+
+def _fetch_deploy_market_rows(
+    day_offset: int,
+    *,
+    search: str = "",
+    ticker: str = "",
+    log_label: str = "deploy_market_fetch",
+) -> list[dict[str, Any]]:
+    started_at = time.perf_counter()
+    payload = _load_deploy_market_payload()
+    markets = payload.get("markets") or []
+    metadata = _deploy_market_metadata(day_offset, payload)
+    active_date = _date_key(metadata.get("active_date"))
+    normalized_ticker = ticker.strip().upper()
+    rows = []
+    for market in markets:
+        if normalized_ticker and str(market.get("ticker") or "").upper() != normalized_ticker:
+            continue
+        if not normalized_ticker and active_date and _date_key(market.get("forecast_date")) != active_date:
+            continue
+        row = _deploy_market_row(market, metadata)
+        if search and search not in str(row.get("search_text") or "").lower():
+            continue
+        rows.append(row)
+    rows.sort(
+        key=lambda row: (
+            _date_key(row.get("forecast_date")) or "",
+            str(row.get("city") or ""),
+            _float_or_none(row.get("floor_strike")) or -999,
+            str(row.get("ticker") or ""),
+        )
+    )
+    logger.info("%s rows=%s total_ms=%.1f", log_label, len(rows), _elapsed_ms(started_at))
+    return rows[:500]
+
+
+def _load_deploy_market_payload() -> dict[str, Any]:
+    try:
+        payload = json.loads(DEPLOY_SCORED_MARKETS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {"markets": []}
+    return payload if isinstance(payload, dict) else {"markets": []}
+
+
+def _deploy_market_metadata(day_offset: int, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload = payload or _load_deploy_market_payload()
+    markets = payload.get("markets") or []
+    dates = sorted({_date_key(market.get("forecast_date")) for market in markets if _date_key(market.get("forecast_date"))})
+    today_key = dates[0] if dates else date.today().isoformat()
+    tomorrow_key = _add_days(today_key, 1)
+    active_date = _add_days(today_key, day_offset) or today_key
+    return {
+        "today_key": today_key,
+        "tomorrow_key": tomorrow_key,
+        "active_date": active_date,
+        "total_contract_count": len(markets),
+        "updated_at": _parse_utc_datetime(payload.get("pulled_at")),
+    }
+
+
+def _deploy_market_row(market: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
+    city = market.get("city") or market.get("matched_location") or _city_from_series_title(market.get("series_title"))
+    pieces = [
+        market.get("ticker"),
+        market.get("title"),
+        market.get("subtitle"),
+        city,
+        market.get("series_title"),
+    ]
+    return {
+        **market,
+        "city": city,
+        "timezone": market.get("timezone") or "America/New_York",
+        "forecast_date": _parse_date_value(market.get("forecast_date")) or market.get("forecast_date"),
+        "event_date": _parse_date_value(market.get("event_date") or market.get("forecast_date"))
+        or market.get("event_date")
+        or market.get("forecast_date"),
+        "search_text": " ".join(str(piece).lower() for piece in pieces if piece),
+        "_today_key": metadata.get("today_key"),
+        "_tomorrow_key": metadata.get("tomorrow_key"),
+        "_active_date": metadata.get("active_date"),
+        "_total_contract_count": metadata.get("total_contract_count"),
+        "_updated_at": metadata.get("updated_at"),
+    }
+
+
+def _city_from_series_title(value: Any) -> str:
+    text = str(value or "")
+    prefix = "Highest temperature in "
+    return text[len(prefix) :] if text.startswith(prefix) else "Unknown"
+
+
+def _parse_date_value(value: Any) -> date | None:
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except ValueError:
+        return None
 
 
 def _marketplace_metadata_from_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
